@@ -1,0 +1,162 @@
+name: Release
+
+# Builds, signs and publishes the six per-platform packages when a version
+# tag is pushed. The tag must match plugin.json, e.g. v1.0.0 for
+# "version": "1.0.0".
+#
+# The "release" environment holds the signing key: PLUGIN_SIGNING_KEY is the
+# minisign secret key file and PLUGIN_SIGNING_KEY_PASSWORD its password. Give
+# the environment a required reviewer so a pushed tag alone cannot sign. The
+# PLUGIN_SIGNING_PUBLIC_KEY variable, the matching public key, lets the run
+# verify what it signed. The catalog (nginxui/plugins) polls this
+# repository's releases and picks the new one up on its own.
+#
+# Like ci.yml, the SDKs are checked out next to this repository until they
+# are published.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    defaults:
+      run:
+        working-directory: plugin-log-analytics
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin-log-analytics
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nginxui/plugin-sdk-go
+          path: plugin-sdk-go
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nginxui/plugin-sdk-web
+          path: plugin-sdk-web
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: plugin-log-analytics/go.mod
+          cache-dependency-path: plugin-log-analytics/go.sum
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Check that the tag matches plugin.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' plugin.json | head -n 1)
+          if [ "${tag}" != "${version}" ]; then
+            echo "tag v${tag} does not match plugin.json version ${version}"
+            exit 1
+          fi
+
+      - name: Build the web SDK
+        working-directory: plugin-sdk-web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Build the webapp bundle
+        working-directory: plugin-log-analytics/webapp
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - run: go test -race -count=1 . ./cmd/... ./internal/...
+
+      - name: plugin.json is up to date
+        run: |
+          go run ./cmd/manifest -out "${RUNNER_TEMP}/plugin.json" >/dev/null
+          diff -u plugin.json "${RUNNER_TEMP}/plugin.json"
+
+      - name: Install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+
+      - name: Build and sign the packages
+        env:
+          PLUGIN_SIGNING_KEY: ${{ secrets.PLUGIN_SIGNING_KEY }}
+          PLUGIN_SIGNING_KEY_PASSWORD: ${{ secrets.PLUGIN_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PLUGIN_SIGNING_KEY}" ]; then
+            echo "the PLUGIN_SIGNING_KEY secret is not set in the release environment; a release must be signed"
+            exit 1
+          fi
+          key_file="${RUNNER_TEMP}/plugin-signing.key"
+          trap 'rm -f "${key_file}"' EXIT
+          (umask 077 && printf '%s\n' "${PLUGIN_SIGNING_KEY}" >"${key_file}")
+          MINISIGN_KEY="${key_file}" MINISIGN_PASSWORD="${PLUGIN_SIGNING_KEY_PASSWORD}" ./build.sh
+
+      # Every archive: its .sha256 file, plugin.sums against the extracted
+      # files, and the signature against the release public key when the
+      # variable is set.
+      - name: Verify the packages
+        env:
+          PLUGIN_SIGNING_PUBLIC_KEY: ${{ vars.PLUGIN_SIGNING_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          public_key=$(printf '%s\n' "${PLUGIN_SIGNING_PUBLIC_KEY}" | grep -Ev '^untrusted comment:' | tr -d '[:space:]')
+          if [ -z "${public_key}" ]; then
+            echo "::notice title=Signatures not checked::Set the PLUGIN_SIGNING_PUBLIC_KEY variable to the release public key to verify the signatures here."
+          fi
+          for archive in dist/*.tar.gz; do
+            echo "::group::${archive}"
+            (cd dist && sha256sum -c "$(basename "${archive}").sha256")
+            dir=$(mktemp -d)
+            tar -xzf "${archive}" -C "${dir}"
+            test -f "${dir}/plugin.sums"
+            test -f "${dir}/plugin.sums.minisig"
+            (cd "${dir}" && sha256sum -c --quiet plugin.sums)
+            if [ -n "${public_key}" ]; then
+              minisign -V -q -m "${dir}/plugin.sums" -x "${dir}/plugin.sums.minisig" -P "${public_key}"
+              echo "plugin.sums.minisig verifies against PLUGIN_SIGNING_PUBLIC_KEY"
+            fi
+            rm -rf "${dir}"
+            echo "::endgroup::"
+          done
+
+      # The notes are this version's section of CHANGELOG.md when it has one.
+      - name: Release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          notes="${RUNNER_TEMP}/notes.md"
+          awk -v heading="## [${version}]" '
+            /^## / { on = index($0, heading) == 1; next }
+            on { print }
+          ' CHANGELOG.md >"${notes}"
+          if grep -q '[^[:space:]]' "${notes}"; then
+            echo "path=${notes}" >>"${GITHUB_OUTPUT}"
+          else
+            echo "CHANGELOG.md has no section for ${version}, the notes will be generated"
+          fi
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.notes.outputs.path }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NOTES}" ]; then
+            notes=(--notes-file "${NOTES}")
+          else
+            notes=(--generate-notes)
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            "${notes[@]}" \
+            dist/*.tar.gz dist/*.tar.gz.sha256

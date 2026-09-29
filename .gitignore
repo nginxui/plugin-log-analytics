@@ -1,0 +1,17 @@
+.DS_Store
+dist/
+*.tar.gz
+*.test
+*.out
+*.prof
+
+# Built executables
+log-analytics
+log-analytics-*
+
+# Webapp bundle
+node_modules/
+webapp/dist/
+
+# Test leftovers
+internal/indexer/log-index/
