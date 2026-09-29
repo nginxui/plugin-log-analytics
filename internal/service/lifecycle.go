@@ -36,6 +36,10 @@ var freeOSMemory = debug.FreeOSMemory
 // returned function is called. The first call after a release opens the shards
 // in parallel; concurrent callers wait for that instead of opening them twice.
 func AcquireQuery(ctx context.Context) (release func(), err error) {
+	if err := WaitReady(ctx); err != nil {
+		return nil, err
+	}
+
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
 

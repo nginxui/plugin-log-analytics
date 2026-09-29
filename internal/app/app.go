@@ -120,6 +120,7 @@ func (a *App) Start(host Host) error {
 	// The old data of a host that kept the log analytics itself comes first: the
 	// index and its metadata have to be in place before the services read them.
 	if _, err := store.Open(a.dataDir); err != nil {
+		service.MarkStartFailed(nil)
 		return err
 	}
 	if _, err := legacy.Consume(a.ctx, a.dataDir, host); err != nil {

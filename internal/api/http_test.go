@@ -206,6 +206,9 @@ func TestQueryOnAPathTheHostDoesNotListIsRefused(t *testing.T) {
 
 func TestQueryBeforeTheServicesStartAnswersWithTheCodedError(t *testing.T) {
 	service.StopServices()
+	wait := service.StartWait
+	service.StartWait = 50 * time.Millisecond
+	t.Cleanup(func() { service.StartWait = wait })
 	router := NewRouter()
 
 	req := httptest.NewRequest(http.MethodPost, "/search", bytes.NewReader([]byte(`{}`)))

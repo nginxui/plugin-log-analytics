@@ -105,6 +105,7 @@ func InitializeServices(ctx context.Context) {
 		servicesInitializing = false
 		servicesMutex.Unlock()
 		logger.Errorf("Failed to initialize modern services: %v", err)
+		markReady(ErrModernIndexerNotAvailable)
 		return
 	}
 
@@ -126,6 +127,7 @@ func InitializeServices(ctx context.Context) {
 	}
 
 	logger.Info("Modern nginx log services initialization completed")
+	markReady(nil)
 
 	// Initialize task scheduler after services are ready
 	go InitTaskScheduler(serviceCtx)
@@ -580,6 +582,7 @@ func stopServicesLocked() {
 	// Reset state
 	globalLogFileManager = nil
 	servicesInitialized = false
+	resetReady()
 	shutdownCancel = nil
 	serviceContext = nil
 	isShuttingDown = false

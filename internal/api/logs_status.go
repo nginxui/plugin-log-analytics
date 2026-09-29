@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -40,6 +41,10 @@ type LogStatusItem struct {
 	QueuePosition  int       `json:"queue_position"`
 }
 
+// statusStartWait is how long the status waits for the services to start. It
+// is short because the status can answer without them.
+var statusStartWait = 5 * time.Second
+
 // LogStatusResponse is the response of GET /logs/status.
 type LogStatusResponse struct {
 	Items   []LogStatusItem `json:"items"`
@@ -50,8 +55,12 @@ type LogStatusResponse struct {
 // log path like the log list of the host, with the summary of the whole list.
 // The optional filters are the ones the host list accepted: type, name, path and
 // indexed. The state is read from the metadata database, so the call opens no
-// shard.
+// shard. Right after the plugin starts it waits a little for the services, so
+// the list does not show every log as not indexed for a moment.
 func GetLogsStatus(c *gin.Context) {
+	// Without the services the list below still answers from the host logs.
+	_ = service.WaitReadyWithin(c.Request.Context(), statusStartWait)
+
 	var filters []func(*service.NginxLogWithIndex) bool
 
 	if logType := c.Query("type"); logType != "" {

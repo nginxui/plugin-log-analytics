@@ -43,3 +43,37 @@ func TestFirstRequestsWaitForShardsToOpen(t *testing.T) {
 		require.Equal(t, http.StatusOK, <-codes)
 	}
 }
+
+// TestRequestsBeforeTheServicesStartWaitForThem sends requests while the
+// services are still down, as the host may right after the plugin listens.
+// They wait and succeed once the services are up.
+func TestRequestsBeforeTheServicesStartWaitForThem(t *testing.T) {
+	env := startHTTPEnv(t, 50)
+	service.StopServices()
+
+	paths := []string{"/search", "/logs/status"}
+	codes := make(chan int, len(paths))
+	for _, path := range paths {
+		go func(path string) {
+			if path == "/logs/status" {
+				codes <- env.do(t, http.MethodGet, path, nil).Code
+				return
+			}
+			codes <- env.do(t, http.MethodPost, path, map[string]any{"log_path": env.logPath, "limit": 10}).Code
+		}(path)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case code := <-codes:
+		t.Fatalf("a request answered %d before the services started", code)
+	default:
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	service.InitializeServices(ctx)
+	for range paths {
+		require.Equal(t, http.StatusOK, <-codes)
+	}
+}
