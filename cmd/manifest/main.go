@@ -161,7 +161,7 @@ func Build() (*protocol.Manifest, error) {
 					Key:         "geo_map_path",
 					Type:        "text",
 					DisplayName: "Map files folder",
-					HelpText:    "Folder with the map boundary files. Empty uses the maps folder in the plugin data directory.",
+					HelpText:    "Folder with the map outline files. Empty uses the plugin's own folder. Files not found there are loaded online.",
 				},
 			},
 		},

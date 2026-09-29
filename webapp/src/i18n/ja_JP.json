@@ -39,7 +39,7 @@
   "Device": "デバイス",
   "Device Statistics": "デバイス統計",
   "Device Type": "デバイスタイプ",
-  "Directory with the map outline files of China. Leave empty to load them from an online source.": "中国の地図の輪郭ファイルがあるディレクトリです。空欄の場合はオンラインから読み込みます。",
+  "Directory with the map outline files of China. Leave empty to use the plugin's own folder. Files not found there are loaded online.": "中国の地図の輪郭ファイルがあるディレクトリです。空欄の場合はプラグイン専用のフォルダを使います。そこにないファイルはオンラインから読み込みます。",
   "Document Count": "ドキュメント数",
   "Download GeoLite2 Database": "GeoLite2 データベースをダウンロード",
   "Download complete": "ダウンロードが完了しました",

@@ -39,7 +39,7 @@
   "Device": "设备",
   "Device Statistics": "设备统计",
   "Device Type": "设备类型",
-  "Directory with the map outline files of China. Leave empty to load them from an online source.": "中国地图轮廓文件所在目录。留空则从在线来源加载。",
+  "Directory with the map outline files of China. Leave empty to use the plugin's own folder. Files not found there are loaded online.": "中国地图轮廓文件所在目录。留空则使用插件自己的目录，目录中没有的文件会在线加载。",
   "Document Count": "文档数量",
   "Download GeoLite2 Database": "下载 GeoLite2 数据库",
   "Download complete": "下载完成",

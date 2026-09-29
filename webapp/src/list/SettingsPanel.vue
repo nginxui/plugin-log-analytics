@@ -156,7 +156,7 @@ const systemRequirements = [
 
         <AFormItem
           :label="$gettext('Map files directory')"
-          :extra="$gettext('Directory with the map outline files of China. Leave empty to load them from an online source.')"
+          :extra="$gettext('Directory with the map outline files of China. Leave empty to use the plugin\'s own folder. Files not found there are loaded online.')"
         >
           <AInput v-model:value="form.geo_map_path" />
         </AFormItem>
