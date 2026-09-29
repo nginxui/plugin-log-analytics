@@ -118,8 +118,11 @@ func (s *Searcher) Search(ctx context.Context, req *SearchRequest) (*SearchResul
 	// Set defaults
 	s.setRequestDefaults(req)
 
+	// A scan has to see the documents, so it cannot be answered from the cache.
+	useCache := s.config.EnableCache && req.UseCache && req.Scan == nil
+
 	// Check cache if enabled
-	if s.config.EnableCache && req.UseCache {
+	if useCache {
 		if cached := s.getFromCache(req); cached != nil {
 			cached.FromCache = true
 			cached.CacheHit = true
@@ -162,6 +165,14 @@ func (s *Searcher) Search(ctx context.Context, req *SearchRequest) (*SearchResul
 	}
 	defer releaseAlias()
 
+	// Aggregates and scans ride along with the search: Bleve shows every match
+	// to the scan hook, so they cost no extra pass over the index.
+	var sink *scanSink
+	if req.Summary != nil || req.Scan != nil {
+		sink = newScanSink(req)
+		searchCtx = context.WithValue(searchCtx, search.MakeDocumentMatchHandlerKey, sink.handlerMaker())
+	}
+
 	// Execute search across shards
 	result, err := s.executeDistributedSearch(searchCtx, query, req, indexAlias)
 	if err != nil {
@@ -176,10 +187,22 @@ func (s *Searcher) Search(ctx context.Context, req *SearchRequest) (*SearchResul
 		result.Stats = s.searchStats(searchCtx, query, req, result.TotalHits, indexAlias)
 	}
 
+	if sink != nil {
+		scanned := sink.results()
+		next := 0
+		if req.Summary != nil {
+			result.Summary = mergeSummary(req.Summary, scanned[next])
+			next++
+		}
+		if req.Scan != nil {
+			result.Scanned = scanned[next]
+		}
+	}
+
 	result.Duration = time.Since(startTime)
 
 	// Cache result if enabled
-	if s.config.EnableCache && req.UseCache {
+	if useCache {
 		s.cacheResult(req, result)
 	}
 
@@ -228,6 +251,12 @@ func (s *Searcher) executeGlobalScoringSearch(
 
 	// Configure the search request with proper sorting and other settings
 	s.configureSearchRequest(searchReq, req)
+
+	// Only a relevance sort reads scores. Every other order, and the queries
+	// that return no hits, skip the scoring work on each matching document.
+	if req.SortBy != "_score" || searchReq.Size == 0 {
+		searchReq.Score = bleve.ScoreNone
+	}
 
 	// Global scoring runs an extra pre-search round across all shards to gather
 	// term statistics for consistent TF-IDF ranking. That only matters when
@@ -345,15 +374,19 @@ func (s *Searcher) configureSearchRequest(searchReq *bleve.SearchRequest, req *S
 		sortOrder = SortOrderDesc // Default sort order
 	}
 
-	// Apply Bleve sorting - use "-" prefix for descending order.
-	// Always append the document ID as a final tiebreaker: the primary sort
-	// key (usually second-resolution timestamps) is not unique, and a
-	// deterministic total order is required for stable pagination and
-	// SearchAfter cursors.
-	if sortOrder == SortOrderDesc {
-		searchReq.SortBy([]string{"-" + sortField, "_id"})
-	} else {
-		searchReq.SortBy([]string{sortField, "_id"})
+	// Apply Bleve sorting - use "-" prefix for descending order. A request
+	// without hits has nothing to order, so it keeps Bleve's default and skips
+	// the doc value lookup per match.
+	//
+	// The document ID is always the final tiebreaker: the primary key (usually a
+	// second resolution timestamp) is not unique, and a deterministic total order
+	// is required for stable pagination and SearchAfter cursors.
+	if searchReq.Size > 0 {
+		if sortOrder == SortOrderDesc {
+			searchReq.SortBy([]string{"-" + sortField, "_id"})
+		} else {
+			searchReq.SortBy([]string{sortField, "_id"})
+		}
 	}
 
 	// Cursor-based pagination: resume strictly after the given sort values

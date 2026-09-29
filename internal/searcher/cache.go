@@ -48,37 +48,38 @@ func NewCache(maxSize int64) *Cache {
 
 // CacheKeyData represents the normalized data used for cache key generation
 type CacheKeyData struct {
-	Query          string   `json:"query"`
-	Limit          int      `json:"limit"`
-	Offset         int      `json:"offset"`
-	SearchAfter    []string `json:"search_after"`
-	SortBy         string   `json:"sort_by"`
-	SortOrder      string   `json:"sort_order"`
-	StartTime      *int64   `json:"start_time"`
-	EndTime        *int64   `json:"end_time"`
-	UseMainLogPath bool     `json:"use_main_log_path"`
-	LogPaths       []string `json:"log_paths"`
-	Fields         []string `json:"fields"`
-	IPAddresses    []string `json:"ip_addresses"`
-	StatusCodes    []int    `json:"status_codes"`
-	Methods        []string `json:"methods"`
-	Paths          []string `json:"paths"`
-	UserAgents     []string `json:"user_agents"`
-	Referers       []string `json:"referers"`
-	Countries      []string `json:"countries"`
-	Provinces      []string `json:"provinces"`
-	Browsers       []string `json:"browsers"`
-	OSs            []string `json:"operating_systems"`
-	Devices        []string `json:"devices"`
-	MinBytes       *int64   `json:"min_bytes"`
-	MaxBytes       *int64   `json:"max_bytes"`
-	MinReqTime     *float64 `json:"min_request_time"`
-	MaxReqTime     *float64 `json:"max_request_time"`
-	IncludeFacets  bool     `json:"include_facets"`
-	IncludeStats   bool     `json:"include_stats"`
-	FacetFields    []string `json:"facet_fields"`
-	FacetSize      int      `json:"facet_size"`
-	UseCache       bool     `json:"use_cache"`
+	Query          string       `json:"query"`
+	Limit          int          `json:"limit"`
+	Offset         int          `json:"offset"`
+	SearchAfter    []string     `json:"search_after"`
+	SortBy         string       `json:"sort_by"`
+	SortOrder      string       `json:"sort_order"`
+	StartTime      *int64       `json:"start_time"`
+	EndTime        *int64       `json:"end_time"`
+	UseMainLogPath bool         `json:"use_main_log_path"`
+	LogPaths       []string     `json:"log_paths"`
+	Fields         []string     `json:"fields"`
+	IPAddresses    []string     `json:"ip_addresses"`
+	StatusCodes    []int        `json:"status_codes"`
+	Methods        []string     `json:"methods"`
+	Paths          []string     `json:"paths"`
+	UserAgents     []string     `json:"user_agents"`
+	Referers       []string     `json:"referers"`
+	Countries      []string     `json:"countries"`
+	Provinces      []string     `json:"provinces"`
+	Browsers       []string     `json:"browsers"`
+	OSs            []string     `json:"operating_systems"`
+	Devices        []string     `json:"devices"`
+	MinBytes       *int64       `json:"min_bytes"`
+	MaxBytes       *int64       `json:"max_bytes"`
+	MinReqTime     *float64     `json:"min_request_time"`
+	MaxReqTime     *float64     `json:"max_request_time"`
+	IncludeFacets  bool         `json:"include_facets"`
+	IncludeStats   bool         `json:"include_stats"`
+	Summary        *SummarySpec `json:"summary"`
+	FacetFields    []string     `json:"facet_fields"`
+	FacetSize      int          `json:"facet_size"`
+	UseCache       bool         `json:"use_cache"`
 }
 
 // sortedUniqueStrings returns a sorted, deduplicated copy of a string slice
@@ -151,6 +152,7 @@ func (c *Cache) GenerateKey(req *SearchRequest) string {
 		MaxReqTime:     req.MaxReqTime,
 		IncludeFacets:  req.IncludeFacets,
 		IncludeStats:   req.IncludeStats,
+		Summary:        req.Summary,
 		FacetFields:    sortedUniqueStrings(req.FacetFields),
 		FacetSize:      req.FacetSize,
 		UseCache:       req.UseCache,

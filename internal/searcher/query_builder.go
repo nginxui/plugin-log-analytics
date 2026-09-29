@@ -25,18 +25,11 @@ func (qb *QueryBuilder) BuildQuery(req *SearchRequest) (query.Query, error) {
 		return nil, fmt.Errorf("search request cannot be nil")
 	}
 
-	// Build main query
-	var mainQuery query.Query
-
-	if req.Query == "" {
-		mainQuery = bleve.NewMatchAllQuery()
-	} else {
-		mainQuery = bleve.NewMatchQuery(req.Query)
-	}
-
 	// Create boolean query to combine filters
 	boolQuery := bleve.NewBooleanQuery()
-	boolQuery.AddMust(mainQuery)
+	if req.Query != "" {
+		boolQuery.AddMust(bleve.NewMatchQuery(req.Query))
+	}
 
 	// Add time range filters
 	if req.StartTime != nil || req.EndTime != nil {
@@ -147,6 +140,12 @@ func (qb *QueryBuilder) BuildQuery(req *SearchRequest) (query.Query, error) {
 		if reqTimeQuery := qb.buildNumericRangeQuery("request_time", req.MinReqTime, req.MaxReqTime); reqTimeQuery != nil {
 			boolQuery.AddMust(reqTimeQuery)
 		}
+	}
+
+	// A match-all clause next to real filters would only walk every document,
+	// so it is added when nothing else narrows the search.
+	if boolQuery.Must == nil {
+		boolQuery.AddMust(bleve.NewMatchAllQuery())
 	}
 
 	return boolQuery, nil

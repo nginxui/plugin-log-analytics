@@ -216,8 +216,12 @@ func performAsyncRebuild(modernIndexer interface{}, path string, endRound func()
 		},
 	}
 
-	// Store the progress config to access from rebuild functions
-	var globalMinTime, globalMaxTime *time.Time
+	// The time range of the rebuild, written when it ends and read by the
+	// completion callback, which runs on another goroutine.
+	var (
+		timeRangeMu                  sync.Mutex
+		globalMinTime, globalMaxTime *time.Time
+	)
 
 	// Create a wrapper progress config that captures timing information
 	wrapperProgressConfig := &indexer.ProgressConfig{
@@ -234,14 +238,18 @@ func performAsyncRebuild(modernIndexer interface{}, path string, endRound func()
 				var startTimeUnix, endTimeUnix int64
 
 				// Use global timing if available, otherwise use current time
-				if globalMinTime != nil {
-					startTimeUnix = globalMinTime.Unix()
+				timeRangeMu.Lock()
+				minTime, maxTime := globalMinTime, globalMaxTime
+				timeRangeMu.Unlock()
+
+				if minTime != nil {
+					startTimeUnix = minTime.Unix()
 				} else {
 					startTimeUnix = time.Now().Unix()
 				}
 
-				if globalMaxTime != nil {
-					endTimeUnix = globalMaxTime.Unix()
+				if maxTime != nil {
+					endTimeUnix = maxTime.Unix()
 				} else {
 					endTimeUnix = time.Now().Unix()
 				}
@@ -263,11 +271,15 @@ func performAsyncRebuild(modernIndexer interface{}, path string, endRound func()
 	if path != "" {
 		// Rebuild specific file
 		minTime, maxTime := rebuildSingleFile(modernIndexer, path, logFileManager, wrapperProgressConfig)
+		timeRangeMu.Lock()
 		globalMinTime, globalMaxTime = minTime, maxTime
+		timeRangeMu.Unlock()
 	} else {
 		// Rebuild all indexes
 		minTime, maxTime := rebuildAllFiles(modernIndexer, logFileManager, wrapperProgressConfig)
+		timeRangeMu.Lock()
 		globalMinTime, globalMaxTime = minTime, maxTime
+		timeRangeMu.Unlock()
 	}
 }
 

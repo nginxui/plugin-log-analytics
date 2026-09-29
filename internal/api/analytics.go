@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -352,20 +353,21 @@ func AdvancedSearchLogs(c *gin.Context) {
 		}
 	}
 
-	// Build search request
+	// Build search request. The summary is computed in the same pass as the
+	// page of hits, over the whole match set: visitors, distinct pages and the
+	// traffic totals.
 	searchReq := &searcher.SearchRequest{
-		Query:               req.Query,
-		Limit:               req.Limit,
-		Offset:              req.Offset,
-		SortBy:              req.SortBy,
-		SortOrder:           req.SortOrder,
-		UseCache:            true,
-		Timeout:             60 * time.Second, // Add timeout for large facet operations
-		IncludeHighlighting: true,
-		IncludeFacets:       true,                         // Re-enable facets for accurate summary stats
-		FacetFields:         []string{"ip", "path_exact"}, // For UV and Unique Pages
-		FacetSize:           10000,                        // Balanced: large enough for most cases, but not excessive
-		IncludeStats:        true,                         // Traffic totals for the whole match set, not just this page
+		Query:     req.Query,
+		Limit:     req.Limit,
+		Offset:    req.Offset,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+		UseCache:  true,
+		Timeout:   60 * time.Second,
+		Summary: &searcher.SummarySpec{
+			DistinctFields: []string{"ip", "path_exact"},
+			Bytes:          true,
+		},
 	}
 
 	// If no sorting is specified, default to sorting by timestamp descending.
@@ -450,54 +452,25 @@ func AdvancedSearchLogs(c *gin.Context) {
 
 	// --- Transform the searcher result to the API response structure ---
 
-	// 1. Extract entries from hits
+	// 1. Extract entries from hits. The hits may be shared with the result
+	// cache and with other requests, so the entry is a copy that can be changed.
 	entries := make([]map[string]interface{}, len(result.Hits))
 	for i, hit := range result.Hits {
-		entries[i] = enrichEntryWithIPLocationLabel(hit.Fields, useChineseName)
+		entries[i] = enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName)
 	}
 
-	// 2. Calculate summary stats from the overall results using Counter for accuracy
+	// 2. Summary stats describe the whole match set, not the returned page
 	pv := int(result.TotalHits)
 	var uv, uniquePages int
-	var facetUV, facetUniquePages int
-
-	// First get facet values as fallback
-	if result.Facets != nil {
-		if ipFacet, ok := result.Facets["ip"]; ok {
-			facetUV = ipFacet.Total // .Total on a facet gives the count of unique terms
-			uv = facetUV
-		}
-		if pathFacet, ok := result.Facets["path_exact"]; ok {
-			facetUniquePages = pathFacet.Total
-			uniquePages = facetUniquePages
-		}
-	}
-
-	// Override with Counter results for better accuracy
-	if analyticsService != nil {
-		// Get cardinality counts for UV (unique IPs)
-		if uvResult := getCardinalityCount(ctx, "ip", searchReq); uvResult > 0 {
-			uv = uvResult
-			logger.Debugf("🔢 Search endpoint - UV from Counter: %d (vs facet: %d)", uvResult, facetUV)
-		}
-
-		// Get cardinality counts for Unique Pages (unique paths)
-		if upResult := getCardinalityCount(ctx, "path_exact", searchReq); upResult > 0 {
-			uniquePages = upResult
-			logger.Debugf("🔢 Search endpoint - Unique Pages from Counter: %d (vs facet: %d)", upResult, facetUniquePages)
-		}
-	}
-
-	// Traffic totals come from the stats aggregation, which scans the whole
-	// match set (or a bounded prefix of it, in which case it says so) rather
-	// than extrapolating from the current page.
 	var totalTraffic int64
 	var avgTraffic float64
-	var trafficApproximate bool
-	if result.Stats != nil {
-		totalTraffic = result.Stats.TotalBytes
-		avgTraffic = result.Stats.AvgBytes
-		trafficApproximate = result.Stats.Approximate
+	if summary := result.Summary; summary != nil {
+		uv = summary.Distinct["ip"]
+		uniquePages = summary.Distinct["path_exact"]
+		totalTraffic = summary.TotalBytes
+		if summary.Docs > 0 {
+			avgTraffic = float64(summary.TotalBytes) / float64(summary.Docs)
+		}
 	}
 
 	summary := SummaryStats{
@@ -506,7 +479,7 @@ func AdvancedSearchLogs(c *gin.Context) {
 		TotalTraffic:       totalTraffic,
 		UniquePages:        uniquePages,
 		AvgTrafficPerPV:    avgTraffic,
-		TrafficApproximate: trafficApproximate,
+		TrafficApproximate: false,
 	}
 
 	// 3. Assemble the final response
@@ -1332,46 +1305,4 @@ func GetGeoStats(c *gin.Context) {
 	c.JSON(http.StatusOK, GeoStatsResponse{
 		Stats: statsInterface,
 	})
-}
-
-// getCardinalityCount is a helper function to get accurate cardinality counts
-func getCardinalityCount(ctx context.Context, field string, searchReq *searcher.SearchRequest) int {
-	// Create a CardinalityRequest from the SearchRequest
-	cardReq := &searcher.CardinalityRequest{
-		Field:          field,
-		StartTime:      searchReq.StartTime,
-		EndTime:        searchReq.EndTime,
-		LogPaths:       searchReq.LogPaths,
-		UseMainLogPath: searchReq.UseMainLogPath, // Use main_log_path field if enabled
-	}
-
-	searcherService := service.GetSearcher()
-	if searcherService == nil {
-		logger.Debugf("getCardinalityCount: searcher not available for field %s", field)
-		return 0
-	}
-
-	shards := searcherService.GetShards()
-	if len(shards) == 0 {
-		logger.Debugf("getCardinalityCount: searcher has no shards for field %s", field)
-		return 0
-	}
-
-	// The counter wraps the shards in a lightweight IndexAlias; close it after
-	// use so each request does not leave an unreleased alias behind.
-	cardinalityCounter := searcher.NewCounter(shards)
-	defer cardinalityCounter.Stop()
-
-	result, err := cardinalityCounter.Count(ctx, cardReq)
-	if err != nil {
-		logger.Debugf("getCardinalityCount: counter failed for field %s: %v", field, err)
-		return 0
-	}
-
-	if result.Error != "" {
-		logger.Debugf("getCardinalityCount: counter returned error for field %s: %s", field, result.Error)
-		return 0
-	}
-
-	return int(result.Cardinality)
 }

@@ -85,6 +85,14 @@ type SearchRequest struct {
 	FacetSize           int      `json:"facet_size,omitempty"` // Number of terms to return for each facet
 	IncludeStats        bool     `json:"include_stats,omitempty"`
 
+	// Summary asks for aggregates over the whole match set, computed in the
+	// same pass as the hits.
+	Summary *SummarySpec `json:"summary,omitempty"`
+
+	// Scan hands every match to caller supplied scanners in that same pass.
+	// Scanned searches are never served from the cache.
+	Scan *ScanSpec `json:"-"`
+
 	// Performance options
 	Timeout  time.Duration `json:"timeout,omitempty"`
 	UseCache bool          `json:"use_cache,omitempty"`
@@ -105,6 +113,12 @@ type SearchResult struct {
 	// Aggregations
 	Facets map[string]*Facet `json:"facets,omitempty"`
 	Stats  *SearchStats      `json:"stats,omitempty"`
+
+	// Summary answers SearchRequest.Summary.
+	Summary *ScanSummary `json:"summary,omitempty"`
+
+	// Scanned holds the scanners of SearchRequest.Scan, one per shard search.
+	Scanned []DocScanner `json:"-"`
 
 	// Cache info
 	FromCache bool `json:"from_cache,omitempty"`
