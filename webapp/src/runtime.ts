@@ -23,6 +23,13 @@ export function setRegistry(registry: PluginRegistry): void {
   getRuntime().registry = registry
 }
 
+/** Forgets the registry and the warm time. The status store is disposed by its own module. */
+export function resetRuntime(): void {
+  const runtime = getRuntime()
+  runtime.registry = undefined
+  runtime.warmedAt = undefined
+}
+
 export function requireRegistry(): PluginRegistry {
   const registry = getRuntime().registry
   if (!registry)

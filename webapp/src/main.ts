@@ -7,8 +7,9 @@ import { registerPlugin } from '@nginxui/plugin-sdk'
 import { PLUGIN_ID } from '../build.constants'
 import { setAssetBase } from './assets'
 import { translations } from './i18n'
-import { setRegistry } from './runtime'
+import { resetRuntime, setRegistry } from './runtime'
 import { registerSlots } from './slots'
+import { disposeStatusStore } from './store/status'
 import 'virtual:uno.css'
 
 // The script is executing right now, so its address is the package's asset base.
@@ -21,6 +22,12 @@ const plugin: NginxUIPlugin = {
 
     for (const [locale, messages] of Object.entries(translations))
       registry.registerTranslations(locale, messages)
+  },
+  // The host calls this when the plugin is turned off while the page is open.
+  // A later setup starts from a clean state.
+  teardown() {
+    disposeStatusStore()
+    resetRuntime()
   },
 }
 

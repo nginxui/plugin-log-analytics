@@ -327,6 +327,15 @@ export function createStatusStore(deps: StatusStoreDeps) {
     }
   }
 
+  /** Closes the socket and stops every timer, whoever still holds the store. */
+  function dispose() {
+    if (closeTimer !== undefined) {
+      clearTimer(closeTimer)
+      closeTimer = undefined
+    }
+    disconnect()
+  }
+
   /** Calls back when the index of a file became ready. Returns the unsubscribe function. */
   function onIndexReady(listener: (event: IndexReadyEvent) => void): () => void {
     readyListeners.add(listener)
@@ -346,6 +355,7 @@ export function createStatusStore(deps: StatusStoreDeps) {
     isIndexing,
     refresh,
     acquire,
+    dispose,
     onIndexReady,
     handleEvent,
     handleMessage,
@@ -362,6 +372,14 @@ export function useStatusStore(): StatusStore {
     openSocket: () => openPluginSocket('/events') as Promise<SocketLike>,
   })
   return runtime.status as StatusStore
+}
+
+/** Disposes the shared store, the next use creates a fresh one. */
+export function disposeStatusStore(): void {
+  const runtime = getRuntime()
+  const store = runtime.status as StatusStore | undefined
+  runtime.status = undefined
+  store?.dispose()
 }
 
 /**

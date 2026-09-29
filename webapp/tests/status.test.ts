@@ -189,6 +189,21 @@ describe('status store', () => {
     again()
   })
 
+  test('dispose closes the socket at once and does not reconnect', async () => {
+    const release = env.store.acquire()
+    await flush()
+    env.sockets[0].open()
+
+    env.store.dispose()
+    expect(env.sockets[0].closed).toBe(true)
+    expect(env.store.connection.value).toBe('closed')
+
+    // A component unmounted after the teardown releases its hold as usual.
+    release()
+    env.timers.advance(CLOSE_GRACE_MS * 10)
+    expect(env.openCount()).toBe(1)
+  })
+
   test('releasing twice only counts once', async () => {
     const first = env.store.acquire()
     const second = env.store.acquire()
