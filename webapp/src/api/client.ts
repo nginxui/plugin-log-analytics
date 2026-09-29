@@ -54,8 +54,21 @@ export async function search(request: AdvancedSearchRequest): Promise<AdvancedSe
   return data
 }
 
+/**
+ * Encodes a filesystem path for a query string, so a web application firewall
+ * in front of nginx-ui does not mistake a log path for path traversal. The
+ * backend accepts both forms.
+ */
+export function encodePathParam(path: string): string {
+  let binary = ''
+  for (const byte of new TextEncoder().encode(path))
+    binary += String.fromCharCode(byte)
+
+  return `b64_${btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
+}
+
 export async function getPreflight(logPath?: string): Promise<PreflightResponse> {
-  const params = logPath ? { log_path: logPath } : {}
+  const params = logPath ? { log_path: encodePathParam(logPath) } : {}
   const { data } = await getHttp().get<PreflightResponse>('/preflight', { params })
   return data
 }

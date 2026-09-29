@@ -1,7 +1,7 @@
 import type { PluginRegistry } from '@nginxui/plugin-sdk'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { extractMsgids, parsePo } from '../scripts/po'
-import { warm } from '../src/api/client'
+import { encodePathParam, warm } from '../src/api/client'
 import { errorCode, errorMessage, isPathError } from '../src/errors'
 import { openPluginSocket } from '../src/host'
 import { getRuntime, setRegistry } from '../src/runtime'
@@ -191,5 +191,17 @@ msgstr "引用 \\"我\\""
       obj.$gettext('ignored too')
     `)
     expect(found.sort()).toEqual(['Double', 'I\'m escaped', 'In template', 'Marked', 'Single', 'Template', 'With %{name}'].sort())
+  })
+})
+
+describe('path params', () => {
+  test('encodes paths the way the backend decodes them', () => {
+    expect(encodePathParam('/var/log/nginx/access.log')).toBe('b64_L3Zhci9sb2cvbmdpbngvYWNjZXNzLmxvZw')
+    const encoded = encodePathParam('/日志/访问.log')
+    expect(encoded.startsWith('b64_')).toBe(true)
+    expect(encoded).toMatch(/^b64_[\w-]+$/)
+    const base64 = encoded.slice(4).replace(/-/g, '+').replace(/_/g, '/')
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    expect(new TextDecoder().decode(bytes)).toBe('/日志/访问.log')
   })
 })
