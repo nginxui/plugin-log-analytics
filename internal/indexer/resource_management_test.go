@@ -69,6 +69,7 @@ func TestOptimizeShardUsesScorchForceMerge(t *testing.T) {
 func TestFlushAllDoesNotCreateSyntheticMutations(t *testing.T) {
 	manager, shard := newResourceTestShardManager(t)
 	config := DefaultIndexerConfig()
+	config.IndexPath = t.TempDir()
 	config.OptimizeInterval = 0
 	indexer := NewParallelIndexer(config, manager)
 	atomic.StoreInt32(&indexer.running, 1)

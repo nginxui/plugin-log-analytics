@@ -29,17 +29,21 @@ All notable changes to this plugin are documented here. The format follows
   the number of logs indexed at once are plugin settings.
 - The demo mode (`NGINX_UI_DEMO`) makes up provinces and cities for the
   documentation addresses of its synthetic log, as before.
+- The HTTP API is served by the plugin SDK, which listens on the socket in the
+  data directory, or on a loopback port it reports to NGINX UI on Windows, so the
+  plugin runs on Windows too.
+- The IP location database download uses the HTTP proxy configured in NGINX UI.
+  NGINX UI passes it to the plugin process through the standard proxy
+  environment variables.
 
 ### Fixed
 
 - A full rebuild no longer stops the indexer when it finishes: the restarted
   indexer runs on the context of the services instead of the one of the rebuild.
+- An unexpected failure is answered with a generic message and its detail goes to
+  the plugin log only, instead of returning the raw error text, which could name
+  paths on the machine. A request for a log NGINX UI does not list is answered
+  with its numbered error.
 - Unpacking the IP location database writes to a temporary file first, so an
   indexing round that still uses the previous database keeps working, and it
   never overwrites a custom database.
-
-### Known issues
-
-- Windows: NGINX UI reaches a Windows plugin over a loopback port the plugin has
-  to report in the `plugin.initialize` reply (`http_port`). The Go SDK has no way
-  to report it yet, so the plugin cannot be used on Windows until it does.

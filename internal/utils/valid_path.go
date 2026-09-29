@@ -5,7 +5,12 @@ import (
 	"path/filepath"
 	"slices"
 	"sync/atomic"
+
+	"github.com/nginxui/plugin-log-analytics/internal/apierr"
 )
+
+// ErrPathNotWhitelisted answers a request for a log the host does not list.
+var ErrPathNotWhitelisted = apierr.NewScope("nginx_log").New(50014, "log path is not under whitelist")
 
 // HostLog is one nginx log file the host lists for the plugin.
 type HostLog struct {

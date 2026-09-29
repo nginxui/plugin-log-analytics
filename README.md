@@ -70,7 +70,7 @@ its own schedule while it runs.
 | Permission | Why it is needed |
 | --- | --- |
 | `log.files` | To ask NGINX UI which nginx log files it may read, and to be told when that set changes. The plugin reads those files, and only those and their rotated files, itself. |
-| `network` | To download the IP location database from `cloud.nginxui.com`. Nothing else opens a connection. |
+| `network` | To download the IP location database from `cloud.nginxui.com`. Nothing else opens a connection. The download goes through the HTTP proxy configured in NGINX UI, when there is one. |
 | `kv` | To remember where an index is kept when it could not be moved into the plugin data directory during the takeover from an older version. |
 
 Access logs hold addresses, session parameters and user agents. They stay on the
@@ -89,10 +89,9 @@ The binaries are statically linked (`CGO_ENABLED=0`) and built with
 `-trimpath -ldflags "-s -w"`. Each platform ships as its own package, see
 [Packaging](#packaging).
 
-The Windows packages are built like the others, but the plugin is not usable on
-Windows yet: NGINX UI reaches a Windows plugin over a loopback port that the
-plugin has to report during the handshake, and the SDK cannot report one yet.
-See the [changelog](CHANGELOG.md).
+On Windows the HTTP API listens on a loopback port instead of a socket. The
+plugin SDK opens it and reports the port to NGINX UI during the handshake, so
+nothing differs for you.
 
 ## Memory and responsiveness
 
@@ -137,7 +136,7 @@ Everything the plugin writes is below `NGINX_UI_PLUGIN_DATA_DIR`:
 | `index.db` | The state of each file: position, size, entry count, time range, status. |
 | `geolite/` | The IP location database. |
 | `maps/` | Optional map boundary files, see `geo_map_path`. |
-| `http.sock` | The socket the HTTP route of NGINX UI connects to. |
+| `http.sock` | The socket the HTTP route of NGINX UI connects to (on Windows a loopback port is used and no file is created). |
 | `import/` | Only while an older installation is being taken over. |
 
 The index format is unchanged from the one built into NGINX UI. When the format

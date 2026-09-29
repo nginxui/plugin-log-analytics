@@ -198,7 +198,10 @@ func TestQueryOnAPathTheHostDoesNotListIsRefused(t *testing.T) {
 
 	recorder := env.do(t, http.MethodPost, "/search", map[string]any{"log_path": "/etc/passwd"})
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "not under whitelist")
+	body := decode[apierr.Error](t, recorder)
+	assert.EqualValues(t, 50014, body.Code)
+	assert.Equal(t, "nginx_log", body.Scope)
+	assert.Equal(t, "log path is not under whitelist", body.Message)
 }
 
 func TestQueryBeforeTheServicesStartAnswersWithTheCodedError(t *testing.T) {

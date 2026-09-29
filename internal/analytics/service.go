@@ -111,7 +111,7 @@ func (s *service) ValidateLogPath(logPath string) error {
 		return nil // Empty path is acceptable for global search
 	}
 	if !utils.IsValidLogPath(logPath) {
-		return fmt.Errorf("log path is not under whitelist")
+		return utils.ErrPathNotWhitelisted
 	}
 	return nil
 }

@@ -17,6 +17,10 @@ type errorBody struct {
 	Message string `json:"message"`
 }
 
+// internalErrorMessage is what a client sees of an error without a code. It is
+// the text the host answers with in release mode.
+const internalErrorMessage = "Server Error"
+
 // validateErrorBody is the JSON of a request body that could not be read.
 type validateErrorBody struct {
 	Scope   string         `json:"scope"`
@@ -27,7 +31,8 @@ type validateErrorBody struct {
 
 // writeError answers with the error. A coded error keeps its scope, code,
 // message and parameters, which is what clients translate. Any other error
-// becomes a 500 with its text, and a missing record a 404.
+// becomes a 500 with a generic message, since its text can name paths and
+// internals: the detail goes to the plugin log only. A missing record is a 404.
 func writeError(c *gin.Context, err error) {
 	logger.Errorf("%s %s: %v", c.Request.Method, c.Request.URL.Path, err)
 
@@ -38,7 +43,7 @@ func writeError(c *gin.Context, err error) {
 	case errors.As(err, &coded):
 		c.JSON(http.StatusInternalServerError, coded)
 	default:
-		c.JSON(http.StatusInternalServerError, errorBody{Code: http.StatusInternalServerError, Message: err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody{Code: http.StatusInternalServerError, Message: internalErrorMessage})
 	}
 }
 

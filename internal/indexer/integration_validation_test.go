@@ -77,6 +77,7 @@ func TestIntegrationValidation(t *testing.T) {
 	t.Log("Testing optimized indexer with ProgressTracker...")
 
 	config := DefaultIndexerConfig()
+	config.IndexPath = t.TempDir()
 	shardManager := NewGroupedShardManager(config)
 	indexer := NewParallelIndexer(config, shardManager)
 
@@ -158,6 +159,7 @@ func TestOptimizationCompatibility(t *testing.T) {
 	tmpFile.Close()
 
 	config := DefaultIndexerConfig()
+	config.IndexPath = t.TempDir()
 	shardManager := NewGroupedShardManager(config)
 	indexer := NewParallelIndexer(config, shardManager)
 

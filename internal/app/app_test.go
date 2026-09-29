@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"io"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -100,19 +100,21 @@ func shortDir(t *testing.T) string {
 	return dir
 }
 
-func unixClient(socket string) *http.Client {
-	return &http.Client{Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", socket)
-		},
-	}}
-}
-
-func get(t *testing.T, client *http.Client, path string) (int, string) {
+// serve exposes the HTTP handler the plugin hands to the SDK.
+func serve(t *testing.T, plugin *App) string {
 	t.Helper()
 
-	resp, err := client.Get("http://plugin" + path)
+	handler := plugin.Plugin().HTTP
+	require.NotNil(t, handler)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func get(t *testing.T, base, path string) (int, string) {
+	t.Helper()
+
+	resp, err := http.Get(base + path)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -135,45 +137,29 @@ func newHost(t *testing.T, dataDir string) *fakeHost {
 	}
 }
 
-func TestSocketServesTheAPIBeforeTheHandshake(t *testing.T) {
-	dir := shortDir(t)
-	plugin := New(dir)
-	require.NoError(t, plugin.ListenHTTP())
-	t.Cleanup(func() { _ = plugin.Shutdown(context.Background()) })
-
-	info, err := os.Stat(filepath.Join(dir, SocketName))
-	require.NoError(t, err)
-	assert.Equal(t, os.ModeSocket, info.Mode()&os.ModeSocket)
-	if info.Mode().Perm()&0o077 != 0 {
-		t.Fatalf("the socket is reachable by other users: %v", info.Mode())
-	}
-
-	client := unixClient(filepath.Join(dir, SocketName))
+func TestAPIAnswersBeforeTheServicesStart(t *testing.T) {
+	plugin := New(shortDir(t))
+	base := serve(t, plugin)
 
 	// The services are not up yet: the list answers empty, queries say why not.
-	status, body := get(t, client, "/logs/status")
+	status, body := get(t, base, "/logs/status")
 	assert.Equal(t, http.StatusOK, status)
 	assert.Contains(t, body, `"items":[]`)
 
-	status, body = get(t, client, "/preflight")
+	status, body = get(t, base, "/preflight")
 	assert.Equal(t, http.StatusInternalServerError, status)
 	assert.Contains(t, body, `"code":50028`)
 
-	status, _ = get(t, client, "/nothing-here")
+	status, _ = get(t, base, "/nothing-here")
 	assert.Equal(t, http.StatusNotFound, status)
 }
 
-func TestListenReplacesAStaleSocket(t *testing.T) {
-	dir := shortDir(t)
-	stale := filepath.Join(dir, SocketName)
-	require.NoError(t, os.WriteFile(stale, []byte("left behind"), 0o600))
+func TestPluginDeclaresTheHTTPCapabilityThroughTheSDK(t *testing.T) {
+	plugin := New(shortDir(t)).Plugin()
 
-	plugin := New(dir)
-	require.NoError(t, plugin.ListenHTTP())
-	t.Cleanup(func() { _ = plugin.Shutdown(context.Background()) })
-
-	status, _ := get(t, unixClient(stale), "/logs/status")
-	assert.Equal(t, http.StatusOK, status)
+	assert.NotNil(t, plugin.HTTP)
+	assert.Empty(t, plugin.Capabilities, "the SDK derives the capability from the handler")
+	assert.Contains(t, plugin.Events, protocol.EventLogPathsChanged)
 }
 
 func TestStartReadsTheHostAndFollowsItsEvents(t *testing.T) {
@@ -182,7 +168,6 @@ func TestStartReadsTheHostAndFollowsItsEvents(t *testing.T) {
 	logPath := host.logs[0].Path
 
 	plugin := New(dir)
-	require.NoError(t, plugin.ListenHTTP())
 	require.NoError(t, plugin.Start(host))
 	t.Cleanup(func() { _ = plugin.Shutdown(context.Background()) })
 
@@ -192,8 +177,8 @@ func TestStartReadsTheHostAndFollowsItsEvents(t *testing.T) {
 	assert.True(t, utils.IsValidLogPath(logPath))
 	assert.Equal(t, logPath, utils.DefaultAccessLogPath())
 
-	client := unixClient(filepath.Join(dir, SocketName))
-	status, body := get(t, client, "/logs/status")
+	base := serve(t, plugin)
+	status, body := get(t, base, "/logs/status")
 	require.Equal(t, http.StatusOK, status)
 	assert.Contains(t, body, logPath)
 
@@ -205,7 +190,7 @@ func TestStartReadsTheHostAndFollowsItsEvents(t *testing.T) {
 	handler(context.Background(), protocol.EventNotification{Type: protocol.EventLogPathsChanged})
 
 	assert.True(t, utils.IsValidLogPath(second))
-	_, body = get(t, client, "/logs/status")
+	_, body = get(t, base, "/logs/status")
 	assert.Contains(t, body, second)
 
 	// A saved setting reaches the plugin.
@@ -218,7 +203,6 @@ func TestIndexingShowsTheHostIndicator(t *testing.T) {
 	host := newHost(t, dir)
 
 	plugin := New(dir)
-	require.NoError(t, plugin.ListenHTTP())
 	require.NoError(t, plugin.Start(host))
 	t.Cleanup(func() { _ = plugin.Shutdown(context.Background()) })
 
@@ -243,22 +227,17 @@ func TestStartTakesOverAHandoff(t *testing.T) {
 	assert.NoDirExists(t, importDir, "the host reads the removal as a finished import")
 }
 
-func TestShutdownStopsEverythingAndRemovesTheSocket(t *testing.T) {
+func TestShutdownStopsTheServices(t *testing.T) {
 	dir := shortDir(t)
 	host := newHost(t, dir)
 
 	plugin := New(dir)
-	require.NoError(t, plugin.ListenHTTP())
 	require.NoError(t, plugin.Start(host))
 
 	require.NoError(t, plugin.Shutdown(context.Background()))
 
-	assert.NoFileExists(t, filepath.Join(dir, SocketName))
 	assert.Nil(t, service.GetIndexer(), "the services are stopped")
 	assert.False(t, host.activityLog()[len(host.activityLog())-1], "the indicator is cleared")
-
-	_, err := unixClient(filepath.Join(dir, SocketName)).Get("http://plugin/logs/status")
-	assert.Error(t, err)
 
 	// A second call is harmless.
 	require.NoError(t, plugin.Shutdown(context.Background()))

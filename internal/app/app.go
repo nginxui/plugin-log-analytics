@@ -1,16 +1,11 @@
-// Package app wires the plugin to the host: it serves the HTTP API on the plugin
-// socket, reads settings and the log list from the host, starts the indexing
+// Package app wires the plugin to the host: it hands the HTTP API to the SDK to
+// serve, reads settings and the log list from the host, starts the indexing
 // services once the host says so, and stops them on shutdown.
 package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -28,18 +23,13 @@ import (
 )
 
 const (
-	// SocketName is the unix socket the host proxies the HTTP capability to. The
-	// host looks for it in the data directory of the plugin.
-	SocketName = "http.sock"
-
 	// ActivityKey and ActivityLabel are the entry of the host processing
 	// indicator that shows while logs are indexed. The label is an English
 	// source string, the browser bundle translates it.
 	ActivityKey   = "indexing"
 	ActivityLabel = "Nginx Log Indexing..."
 
-	// shutdownWait bounds how long shutdown waits for a running round and for
-	// open HTTP requests.
+	// shutdownWait bounds how long shutdown waits for a running round.
 	shutdownWait = 20 * time.Second
 )
 
@@ -56,12 +46,12 @@ type Host interface {
 // App is the plugin process.
 type App struct {
 	dataDir string
+	handler http.Handler
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	mu        sync.Mutex
-	server    *http.Server
 	scheduler *service.IncrementalScheduler
 	host      Host
 	started   bool
@@ -70,13 +60,15 @@ type App struct {
 // New returns an app that keeps its files in dataDir.
 func New(dataDir string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &App{dataDir: dataDir, ctx: ctx, cancel: cancel}
+	return &App{dataDir: dataDir, handler: api.NewRouter(), ctx: ctx, cancel: cancel}
 }
 
 // Plugin returns the SDK description of the plugin.
 func (a *App) Plugin() sdk.Plugin {
 	return sdk.Plugin{
-		Capabilities: []string{protocol.CapabilityHTTP},
+		// The SDK listens for the host and serves the API. Until the services
+		// start, the handlers answer that the index is not available.
+		HTTP: a.handler,
 		Configure: func(_ context.Context, settings map[string]any) error {
 			config.Set(config.ParseSettings(settings))
 			return nil
@@ -88,50 +80,6 @@ func (a *App) Plugin() sdk.Plugin {
 		},
 		Shutdown: a.Shutdown,
 	}
-}
-
-// ListenHTTP starts serving the HTTP API on the plugin socket. It has to be up
-// before the host proxies the first request, and does not wait for the host
-// handshake: until the services start, the handlers answer that the index is
-// not available.
-func (a *App) ListenHTTP() error {
-	if a.dataDir == "" {
-		return errors.New("the plugin data directory is not set")
-	}
-	if err := os.MkdirAll(a.dataDir, 0o755); err != nil {
-		return fmt.Errorf("create the data directory: %w", err)
-	}
-
-	path := filepath.Join(a.dataDir, SocketName)
-	// A socket left behind by a process that did not exit cleanly.
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove the stale socket: %w", err)
-	}
-
-	listener, err := net.Listen("unix", path)
-	if err != nil {
-		return fmt.Errorf("listen on %s: %w", path, err)
-	}
-	// Only the user of the host process may talk to the plugin.
-	if err := os.Chmod(path, 0o600); err != nil {
-		logger.Warnf("Could not restrict the permissions of %s: %v", path, err)
-	}
-
-	server := &http.Server{
-		Handler:           api.NewRouter(),
-		ReadHeaderTimeout: 30 * time.Second,
-	}
-
-	a.mu.Lock()
-	a.server = server
-	a.mu.Unlock()
-
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Errorf("HTTP server stopped: %v", err)
-		}
-	}()
-	return nil
 }
 
 // WaitForHost blocks until the host is ready for host calls, then starts the
@@ -251,8 +199,8 @@ func (a *App) setActivity(indexing bool) {
 	}
 }
 
-// Shutdown stops the scheduler, the services and the HTTP server, and removes
-// the socket.
+// Shutdown stops the scheduler and the services. The SDK has already closed the
+// HTTP listener by then and waits for the requests still running afterwards.
 func (a *App) Shutdown(_ context.Context) error {
 	a.cancel()
 
@@ -261,8 +209,7 @@ func (a *App) Shutdown(_ context.Context) error {
 
 	a.mu.Lock()
 	scheduler := a.scheduler
-	server := a.server
-	a.scheduler, a.server = nil, nil
+	a.scheduler = nil
 	a.mu.Unlock()
 
 	if scheduler != nil {
@@ -272,13 +219,6 @@ func (a *App) Shutdown(_ context.Context) error {
 	service.StopServices()
 	service.SetActivityHook(nil)
 	a.setActivity(false)
-
-	if server != nil {
-		if err := server.Shutdown(waitCtx); err != nil {
-			_ = server.Close()
-		}
-	}
-	_ = os.Remove(filepath.Join(a.dataDir, SocketName))
 
 	return store.Close()
 }

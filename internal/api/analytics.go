@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -47,7 +46,7 @@ func decodeAndValidateLogPath(rawPath string) (string, error) {
 	decodedPath, _ := utils.DecodePathParam(rawPath)
 	normalizedPath := filepath.Clean(decodedPath)
 	if !utils.IsValidLogPath(normalizedPath) {
-		return "", fmt.Errorf("log path is not under whitelist")
+		return "", utils.ErrPathNotWhitelisted
 	}
 
 	return normalizedPath, nil
