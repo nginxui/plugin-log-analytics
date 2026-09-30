@@ -397,7 +397,9 @@ func (gsm *GroupedShardManager) Destroy() error {
 		}
 	}
 
-	// Reset state
+	// Reset state. The group names go too: a full rebuild drops the metadata
+	// records they come from, and the next write must follow the new record.
+	gsm.pathToUUID = make(map[string]string)
 	gsm.groups = make(map[string]*ShardGroup)
 	gsm.globalToLocal = make(map[int]groupShardRef)
 	gsm.localToGlobal = make(map[string]int)
