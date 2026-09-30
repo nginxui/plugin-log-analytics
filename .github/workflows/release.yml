@@ -40,17 +40,10 @@ jobs:
           repository: nginxui/plugin-sdk-go
           path: plugin-sdk-go
 
-      - uses: actions/checkout@v4
-        with:
-          repository: nginxui/plugin-sdk-web
-          path: plugin-sdk-web
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: plugin-log-analytics/go.mod
           cache-dependency-path: plugin-log-analytics/go.sum
-
-      - uses: oven-sh/setup-bun@v2
 
       - name: Check that the tag matches plugin.json
         run: |
@@ -61,17 +54,9 @@ jobs:
             exit 1
           fi
 
-      - name: Build the web SDK
-        working-directory: plugin-sdk-web
-        run: |
-          bun install --frozen-lockfile
-          bun run build
-
-      - name: Build the webapp bundle
-        working-directory: plugin-log-analytics/webapp
-        run: |
-          bun install --frozen-lockfile
-          bun run build
+      # Downloads the webapp release webapp.lock names and checks its checksum
+      - name: Take the webapp release
+        run: ./build.sh --webapp-only
 
       - run: go test -race -count=1 . ./cmd/... ./internal/...
 

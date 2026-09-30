@@ -1,10 +1,9 @@
 name: CI
 
-# Runs on every pull request and on main. The plugin still depends on the
-# SDKs through local paths (a `replace` to ../plugin-sdk-go and a
-# `file:../../plugin-sdk-web` dependency), so both SDK repositories are
-# checked out next to this one. Drop those checkouts once the SDKs are
-# published and the local paths are gone.
+# Runs on every pull request and on main. The plugin still depends on the Go
+# SDK through a `replace` to ../plugin-sdk-go, so it is checked out next to
+# this one; drop that checkout once the SDK is published. The webapp comes
+# from the plugin-log-analytics-webapp release that webapp.lock names.
 on:
   pull_request:
   push:
@@ -33,28 +32,16 @@ jobs:
           repository: nginxui/plugin-sdk-go
           path: plugin-sdk-go
 
-      - uses: actions/checkout@v4
-        with:
-          repository: nginxui/plugin-sdk-web
-          path: plugin-sdk-web
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: plugin-log-analytics/go.mod
           cache-dependency-path: plugin-log-analytics/go.sum
 
-      - uses: oven-sh/setup-bun@v2
+      # Downloads the webapp release webapp.lock names and checks its checksum.
+      # The manifest test compares its fragment with the package paths.
+      - name: Take the webapp release
+        run: ./build.sh --webapp-only
 
-      # The webapp resolves @nginxui/plugin-sdk to the SDK checkout, whose
-      # package exports point at dist/, so the SDK is built first.
-      - name: Build the web SDK
-        working-directory: plugin-sdk-web
-        run: |
-          bun install --frozen-lockfile
-          bun run build
-
-      # The Go checks run before the webapp install: node_modules holds Go
-      # files of its own that these checks must not see.
       - name: gofmt
         run: |
           files=$(gofmt -l cmd internal main.go)
@@ -74,15 +61,6 @@ jobs:
           for platform in linux/amd64 linux/arm64 darwin/arm64 windows/amd64; do
             CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" go build -o /dev/null .
           done
-
-      - name: Webapp checks and bundle
-        working-directory: plugin-log-analytics/webapp
-        run: |
-          bun install --frozen-lockfile
-          bun run lint
-          bun run typecheck
-          bun test tests
-          bun run build
 
       # plugin.json is committed and the catalog reads it from the release
       # tag, so it must be what cmd/manifest generates from the code and the

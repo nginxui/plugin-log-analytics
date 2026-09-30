@@ -9,9 +9,9 @@ dist/
 log-analytics
 log-analytics-*
 
-# Webapp bundle
+# The webapp comes from plugin-log-analytics-webapp, see build.sh
 node_modules/
-webapp/dist/
+/webapp/
 
 # Test leftovers
 internal/indexer/log-index/

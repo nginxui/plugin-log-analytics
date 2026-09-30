@@ -217,37 +217,37 @@ Without it the packages are unsigned, and a host installs them only in
 developer mode. `MINISIGN_PASSWORD` answers the password prompt without a
 terminal.
 
-`build.sh` needs the web bundle: run `bun install && bun run build` in `webapp/`
-first, or it stops and says so.
+`build.sh` takes the web bundle from
+[plugin-log-analytics-webapp](https://github.com/nginxui/plugin-log-analytics-webapp),
+which both log analytics plugins share. `webapp.lock` names its release and the
+checksum of the archive. The archive is the one `--webapp` names, the one built
+in a sibling checkout (`../plugin-log-analytics-webapp/release`) or the release
+download, and the build of this plugin is unpacked into `webapp/dist`.
 
 ## Releasing
 
 Set the version in `cmd/manifest`, regenerate `plugin.json`, move the
 `Unreleased` notes in `CHANGELOG.md` under the new version, then push a tag
 `v<version>` that matches `plugin.json`. `.github/workflows/release.yml`
-rebuilds the webapp, runs the tests, signs the six packages with the key kept
+takes the webapp release, runs the tests, signs the six packages with the key kept
 in the `release` environment and publishes them as a GitHub Release with the
 changelog section as its notes.
 
 ## Development
 
 ```bash
-(cd webapp && bun install && bun run build)   # the web bundle, needed by build.sh
+./build.sh --webapp-only                      # the web bundle into webapp/dist
 go run ./cmd/manifest                         # regenerate plugin.json
 go build ./... && go vet ./...
 go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with -short
 ./build.sh --host-only                        # build and package the current platform only
 ./build.sh                                    # cross compile, one package per platform
+./build.sh --webapp ARCHIVE                   # package another webapp build
 ```
-
-Go commands over `./...` also walk `webapp/node_modules`; list the packages as
-above to keep them out.
 
 The plugin depends on
 [plugin-sdk-go](https://github.com/nginxui/plugin-sdk-go)
-through a local `replace` directive until the SDK is published, and the webapp on
-[plugin-sdk-web](https://github.com/nginxui/plugin-sdk-web) through
-`"file:../../plugin-sdk-web"` in `webapp/package.json`.
+through a local `replace` directive until the SDK is published.
 
 The state database uses the same GORM dialector as NGINX UI on top of a pure Go
 SQLite driver, which is what lets the plugin build without cgo.
