@@ -28,3 +28,8 @@ func TestSplitCommaSeparated(t *testing.T) {
 		})
 	}
 }
+
+func TestEndAfterIncludesTheLastSecond(t *testing.T) {
+	assert.Equal(t, int64(10), endAfter(9))
+	assert.Equal(t, int64(0), endAfter(0), "zero leaves the range open")
+}

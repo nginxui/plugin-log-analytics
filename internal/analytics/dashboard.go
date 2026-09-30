@@ -165,7 +165,7 @@ func (s *service) calculateDailyStats(result *searcher.SearchResult, startTime, 
 	// Initialize daily buckets for the entire time range
 	start := time.Unix(startTime, 0)
 	end := time.Unix(endTime, 0)
-	for t := start; t.Before(end) || t.Equal(end); t = t.AddDate(0, 0, 1) {
+	for t := start; t.Before(end); t = t.AddDate(0, 0, 1) {
 		dateStr := t.Format("2006-01-02")
 		if _, exists := dailyMap[dateStr]; !exists {
 			dailyMap[dateStr] = &DailyAccessStats{

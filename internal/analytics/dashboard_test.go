@@ -192,7 +192,7 @@ func TestService_calculateDailyStats(t *testing.T) {
 	stats := s.calculateDailyStats(result, startTime, endTime)
 
 	assert.NotNil(t, stats)
-	assert.Len(t, stats, 3) // Should have 3 days because we initialize for the full range
+	assert.Len(t, stats, 2) // One bucket per day of the range, the end is excluded
 
 	// Verify stats are sorted by timestamp
 	for i := 1; i < len(stats); i++ {

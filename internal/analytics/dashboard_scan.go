@@ -54,7 +54,7 @@ func newDashboardLayout(start, end int64) *dashboardLayout {
 
 	first := time.Unix(start, 0)
 	last := time.Unix(end, 0)
-	for t := first; !t.After(last); t = t.AddDate(0, 0, 1) {
+	for t := first; t.Before(last); t = t.AddDate(0, 0, 1) {
 		key := dateKey(t)
 		if _, exists := layout.dailyIndex[key]; exists {
 			continue

@@ -147,7 +147,8 @@ func GetLogAnalytics(c *gin.Context) {
 		searchReq.StartTime = &req.StartTime
 	}
 	if req.EndTime > 0 {
-		searchReq.EndTime = &req.EndTime
+		end := endAfter(req.EndTime)
+		searchReq.EndTime = &end
 	}
 
 	// Get log entries statistics
@@ -201,6 +202,15 @@ func GetLogPreflight(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// endAfter returns the exclusive end of a request range. The end time of a
+// request is the last second it includes, zero leaves the range open.
+func endAfter(endTime int64) int64 {
+	if endTime <= 0 {
+		return endTime
+	}
+	return endTime + 1
 }
 
 // splitCommaSeparated splits a comma-joined filter value (as produced by the
@@ -400,14 +410,15 @@ func AdvancedSearchLogs(c *gin.Context) {
 		searchReq.StartTime = &req.StartTime
 	}
 	if req.EndTime > 0 {
-		searchReq.EndTime = &req.EndTime
+		end := endAfter(req.EndTime)
+		searchReq.EndTime = &end
 	}
 	// If no time range is provided, default to searching all time.
 	if searchReq.StartTime == nil && searchReq.EndTime == nil {
 		var startTime int64 = 0 // Unix epoch
-		now := time.Now().Unix()
+		end := endAfter(time.Now().Unix())
 		searchReq.StartTime = &startTime
-		searchReq.EndTime = &now
+		searchReq.EndTime = &end
 	}
 
 	// Add field filters
@@ -719,8 +730,8 @@ func GetDashboardAnalytics(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid end_date format, expected YYYY-MM-DD: " + err.Error()})
 			return
 		}
-		// Set end time to end of day and convert to UTC
-		endTime = endTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second).UTC()
+		// The end date is included: the window ends at the next midnight
+		endTime = endTime.AddDate(0, 0, 1).UTC()
 	}
 
 	// Set default time range if not provided (last 30 days)
@@ -828,7 +839,7 @@ func GetWorldMapData(c *gin.Context) {
 
 	geoReq := &analytics.GeoQueryRequest{
 		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
+		EndTime:        endAfter(req.EndTime),
 		LogPath:        safeLogPath,
 		LogPaths:       []string{safeLogPath}, // Use single main log path
 		UseMainLogPath: true,                  // Use main_log_path field for efficient queries
@@ -941,7 +952,7 @@ func GetChinaMapData(c *gin.Context) {
 
 	geoReq := &analytics.GeoQueryRequest{
 		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
+		EndTime:        endAfter(req.EndTime),
 		LogPath:        safeLogPath,
 		LogPaths:       []string{safeLogPath}, // Use single main log path
 		UseMainLogPath: true,                  // Use main_log_path field for efficient queries
@@ -1179,7 +1190,7 @@ func GetChinaCityMapData(c *gin.Context) {
 
 	geoReq := &analytics.GeoQueryRequest{
 		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
+		EndTime:        endAfter(req.EndTime),
 		LogPath:        safeLogPath,
 		LogPaths:       []string{safeLogPath},
 		UseMainLogPath: true,
@@ -1283,7 +1294,7 @@ func GetGeoStats(c *gin.Context) {
 
 	geoReq := &analytics.GeoQueryRequest{
 		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
+		EndTime:        endAfter(req.EndTime),
 		LogPath:        safeLogPath,
 		LogPaths:       []string{safeLogPath}, // Use single main log path
 		UseMainLogPath: true,                  // Use main_log_path field for efficient queries

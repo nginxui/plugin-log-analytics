@@ -163,7 +163,7 @@ func (s *legacyDashboard) calculateTimeBucketStats(ctx context.Context, req *Das
 
 	start := time.Unix(req.StartTime, 0)
 	end := time.Unix(req.EndTime, 0)
-	for t := start; t.Before(end) || t.Equal(end); t = t.AddDate(0, 0, 1) {
+	for t := start; t.Before(end); t = t.AddDate(0, 0, 1) {
 		dateStr := t.Format("2006-01-02")
 		if _, exists := dailyMap[dateStr]; !exists {
 			dailyMap[dateStr] = &DailyAccessStats{
