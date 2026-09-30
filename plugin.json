@@ -2,22 +2,22 @@
   "id": "com.nginxui.log-analytics",
   "name": "Log Analytics",
   "version": "1.0.0",
-  "description": "Search nginx access logs with structured queries and see traffic on a dashboard with a visitor map. Provides the former Advanced Indexing feature.",
+  "description": "Search nginx access and error logs with structured queries and see traffic on a dashboard with a visitor map. Provides the former Advanced Indexing feature.",
   "icon_path": "webapp/dist/icon.svg",
   "api_version": 1,
   "min_nginx_ui_version": "2.7.0",
   "i18n": {
     "ja_JP": {
       "name": "ログ分析",
-      "description": "Nginx のアクセスログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。"
+      "description": "Nginx のアクセスログとエラーログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。"
     },
     "zh_CN": {
       "name": "日志分析",
-      "description": "对 Nginx 访问日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。"
+      "description": "对 Nginx 访问日志和错误日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。"
     },
     "zh_TW": {
       "name": "日誌分析",
-      "description": "對 Nginx 存取日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。"
+      "description": "對 Nginx 存取日誌和錯誤日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。"
     }
   },
   "server": {

@@ -17,6 +17,9 @@ All notable changes to this plugin are documented here. The format follows
   first time the plugin starts.
 - The plugin reads only the nginx log files NGINX UI lists for it, and the
   rotated files next to them.
+- Error logs are indexed beside the access logs and searched in the
+  structured view by level, client, request path and text. They have no
+  dashboard. Existing indexes of access logs are kept as they are.
 - Nothing is opened at start. The views ask the plugin to warm up when they
   appear, the plugin opens its index in parallel, and after ten minutes without
   a request it closes the index and drops its caches again. Every indexing round

@@ -30,7 +30,7 @@ const (
 	PluginID          = "com.nginxui.log-analytics"
 	PluginName        = "Log Analytics"
 	PluginVersion     = "1.0.0"
-	PluginDescription = "Search nginx access logs with structured queries and see traffic on a dashboard with a visitor map. Provides the former Advanced Indexing feature."
+	PluginDescription = "Search nginx access and error logs with structured queries and see traffic on a dashboard with a visitor map. Provides the former Advanced Indexing feature."
 	MinNginxUIVersion = "2.7.0"
 	// RecommendedMemoryMB is the machine memory advised for the plugin.
 	RecommendedMemoryMB = 512
@@ -56,15 +56,15 @@ var chunks = map[string]string{
 var translations = map[string]protocol.ManifestI18n{
 	"zh_CN": {
 		Name:        "日志分析",
-		Description: "对 Nginx 访问日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。",
+		Description: "对 Nginx 访问日志和错误日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。",
 	},
 	"zh_TW": {
 		Name:        "日誌分析",
-		Description: "對 Nginx 存取日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。",
+		Description: "對 Nginx 存取日誌和錯誤日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。",
 	},
 	"ja_JP": {
 		Name:        "ログ分析",
-		Description: "Nginx のアクセスログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。",
+		Description: "Nginx のアクセスログとエラーログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。",
 	},
 }
 
