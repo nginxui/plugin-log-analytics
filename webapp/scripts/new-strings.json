@@ -14,10 +14,10 @@
     "zh_TW": "自訂 MMDB 檔案",
     "ja_JP": "カスタム MMDB ファイル"
   },
-  "Directory with the map outline files of China. Leave empty to load them from an online source.": {
-    "zh_CN": "中国地图轮廓文件所在目录。留空则从在线来源加载。",
-    "zh_TW": "中國地圖輪廓檔案所在目錄。留空則從線上來源載入。",
-    "ja_JP": "中国の地図の輪郭ファイルがあるディレクトリです。空欄の場合はオンラインから読み込みます。"
+  "Directory with the map outline files of China. Leave empty to use the plugin's own folder. Files not found there are loaded online.": {
+    "zh_CN": "中国地图轮廓文件所在目录。留空则使用插件自带的文件夹，其中没有的文件从在线来源加载。",
+    "zh_TW": "中國地圖輪廓檔案所在目錄。留空則使用外掛自帶的資料夾，其中沒有的檔案從線上來源載入。",
+    "ja_JP": "中国の地図の輪郭ファイルがあるディレクトリです。空欄の場合はプラグイン自身のフォルダーを使用し、そこにないファイルはオンラインから読み込みます。"
   },
   "How many log groups are indexed at the same time. Lower it to use less memory while indexing. 0 chooses automatically from the available CPU.": {
     "zh_CN": "同时索引的日志组数量。调低可减少索引期间的内存占用。0 表示根据可用 CPU 自动选择。",
@@ -98,5 +98,15 @@
     "zh_CN": "索引设置",
     "zh_TW": "索引設定",
     "ja_JP": "インデックス設定"
+  },
+  "Client": {
+    "zh_CN": "客户端",
+    "zh_TW": "用戶端",
+    "ja_JP": "クライアント"
+  },
+  "Level": {
+    "zh_CN": "级别",
+    "zh_TW": "等級",
+    "ja_JP": "レベル"
   }
 }
