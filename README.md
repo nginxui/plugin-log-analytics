@@ -219,7 +219,9 @@ terminal.
 which both log analytics plugins share. `webapp.lock` names its release and the
 checksum of the archive. The archive is the one `--webapp` names, the one built
 in a sibling checkout (`../plugin-log-analytics-webapp/release`) or the release
-download, and the build of this plugin is unpacked into `webapp/dist`.
+download, and the build of this plugin is unpacked into `webapp/dist`. After
+`bun run package` in the webapp, `./build.sh --update-lock` pins the new archive
+in `webapp.lock`; a build warns when the sibling archive differs from the lock.
 
 ## Releasing
 
@@ -234,6 +236,7 @@ changelog section as its notes.
 
 ```bash
 ./build.sh --webapp-only                      # the web bundle into webapp/dist
+./build.sh --update-lock                      # pin the sibling webapp build in webapp.lock
 go run ./cmd/manifest                         # regenerate plugin.json
 go build ./... && go vet ./...
 go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with -short
@@ -241,6 +244,10 @@ go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with 
 ./build.sh                                    # cross compile, one package per platform
 ./build.sh --webapp ARCHIVE                   # package another webapp build
 ```
+
+The API shape test checks every answer against the types the web pages
+declare, read from a checkout of `plugin-log-analytics-webapp` next to this
+repository or from `LOG_ANALYTICS_WEBAPP_DIR`.
 
 The plugin depends on
 [plugin-sdk-go](https://github.com/nginxui/plugin-sdk-go)

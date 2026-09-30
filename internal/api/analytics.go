@@ -337,6 +337,34 @@ func enrichErrorEntry(entry map[string]interface{}) map[string]interface{} {
 	return entry
 }
 
+// Fields every entry carries, as the pages declare them: a stored document
+// leaves out the empty ones.
+var (
+	accessEntryDefaults = map[string]any{
+		"timestamp": int64(0), "ip": "", "method": "", "region_code": "", "province": "", "city": "",
+		"path": "", "protocol": "", "status": 0, "bytes_sent": int64(0), "referer": "", "user_agent": "",
+		"browser": "", "browser_version": "", "os": "", "os_version": "", "device_type": "", "raw": "",
+	}
+	errorEntryDefaults = map[string]any{
+		"timestamp": int64(0), "level": "", "pid": 0, "connection": 0, "message": "", "ip": "", "server": "",
+		"request": "", "method": "", "path": "", "upstream": "", "host": "", "referer": "", "raw": "",
+	}
+)
+
+// completeEntry adds the fields an entry of its kind lacks.
+func completeEntry(entry map[string]interface{}) map[string]interface{} {
+	defaults := accessEntryDefaults
+	if level, _ := entry["level"].(string); level != "" {
+		defaults = errorEntryDefaults
+	}
+	for key, value := range defaults {
+		if _, ok := entry[key]; !ok {
+			entry[key] = value
+		}
+	}
+	return entry
+}
+
 // rejectErrorLog answers a dashboard or map request for an error log, whose
 // entries have no traffic figures. It reports whether it answered.
 func rejectErrorLog(c *gin.Context, logPath string) bool {
@@ -504,7 +532,7 @@ func AdvancedSearchLogs(c *gin.Context) {
 	// cache and with other requests, so the entry is a copy that can be changed.
 	entries := make([]map[string]interface{}, len(result.Hits))
 	for i, hit := range result.Hits {
-		entries[i] = enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName))
+		entries[i] = completeEntry(enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName)))
 	}
 
 	// 2. Summary stats describe the whole match set, not the returned page
@@ -608,7 +636,7 @@ func GetLogEntries(c *gin.Context) {
 	// Convert search hits to simple entries format
 	var entries []map[string]interface{}
 	for _, hit := range result.Hits {
-		entries = append(entries, enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName)))
+		entries = append(entries, completeEntry(enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName))))
 	}
 
 	c.JSON(http.StatusOK, AnalyticsResponse{

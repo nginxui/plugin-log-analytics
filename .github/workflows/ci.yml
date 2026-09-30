@@ -3,7 +3,8 @@ name: CI
 # Runs on every pull request and on main. The plugin still depends on the Go
 # SDK through a `replace` to ../plugin-sdk-go, so it is checked out next to
 # this one; drop that checkout once the SDK is published. The webapp comes
-# from the plugin-log-analytics-webapp release that webapp.lock names.
+# from plugin-log-analytics-webapp: the API shape test reads its source at the
+# release that webapp.lock names, and the packages carry that release.
 on:
   pull_request:
   push:
@@ -31,6 +32,18 @@ jobs:
         with:
           repository: nginxui/plugin-sdk-go
           path: plugin-sdk-go
+
+      # The API shape test reads the webapp source of the release this plugin
+      # packages.
+      - name: Read webapp.lock
+        id: webapp
+        run: echo "version=$(sed -n 's/^version=//p' webapp.lock)" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nginxui/plugin-log-analytics-webapp
+          ref: v${{ steps.webapp.outputs.version }}
+          path: plugin-log-analytics-webapp
 
       - uses: actions/setup-go@v5
         with:
