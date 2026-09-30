@@ -11,7 +11,7 @@ import (
 
 const (
 	indexStorageVersionFile = ".nginx-ui-index-version"
-	indexStorageVersion     = "4"
+	indexStorageVersion     = "3"
 )
 
 // PrepareIndexStorage removes rebuildable shard data when the on-disk format

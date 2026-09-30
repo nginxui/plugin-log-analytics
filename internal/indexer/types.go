@@ -509,6 +509,10 @@ func CreateLogIndexMapping() mapping.IndexMapping {
 	addTextField("raw", "standard", storedAndIndexed)
 	addTextField("file_path", "keyword", storedAndIndexed)
 	addTextField("main_log_path", "keyword", storedAndIndexed)
+	// Only error log entries have a level. Each log group has shards of its
+	// own and error logs were not indexed before, so their shards are always
+	// created with this field, and the shards of existing access log groups
+	// need no rebuild.
 	addTextField("level", "keyword", storedIndexedAndSortable)
 
 	indexMapping.AddDocumentMapping("_default", docMapping)
