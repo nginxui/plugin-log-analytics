@@ -174,6 +174,25 @@ type GeoQueryRequest struct {
 	UseMainLogPath bool // Use main_log_path field instead of expanding file paths
 }
 
+// RegionShare is the count of one subdivision of a country, keyed by its ISO
+// 3166-2 code, with its share of all requests of the country.
+type RegionShare struct {
+	Code    string  `json:"code"`
+	Value   int     `json:"value"`
+	Percent float64 `json:"percent"`
+}
+
+// CityPoint is one city of the hotspot map with its share of the requests
+// that were placed in a city.
+type CityPoint struct {
+	Country string  `json:"country"`
+	City    string  `json:"city"`
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+	Value   int     `json:"value"`
+	Percent float64 `json:"percent"`
+}
+
 // GeoDistribution represents geographical distribution of requests
 type GeoDistribution struct {
 	Countries map[string]int

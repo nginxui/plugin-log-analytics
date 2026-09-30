@@ -36,6 +36,8 @@ func NewRouter() *gin.Engine {
 	query.POST("/geo/world", GetWorldMapData)
 	query.POST("/geo/china", GetChinaMapData)
 	query.POST("/geo/china/city", GetChinaCityMapData)
+	query.POST("/geo/regions", GetRegionMapData)
+	query.POST("/geo/points", GetCityPointsData)
 	query.POST("/geo/stats", GetGeoStats)
 
 	r.GET("/geo/boundary/:filename", GetGeoBoundaryFile)

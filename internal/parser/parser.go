@@ -419,6 +419,9 @@ func (p *Parser) parseIP(line []byte, pos int, entry *AccessLogEntry) int {
 				entry.C2 = location.C2
 				entry.C3 = location.C3
 				entry.C4 = location.C4
+				entry.Sub1 = location.Sub1
+				entry.Sub2 = location.Sub2
+				entry.CityPoint = location.CityPoint
 				// Use the specific RegionCode (e.g., province code 'CA') if available,
 				// otherwise, fall back to the CountryCode (e.g., 'US').
 				if location.RegionCode != "" {

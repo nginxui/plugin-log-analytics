@@ -31,6 +31,11 @@ type AccessLogEntry struct {
 	RequestTime  float64  `json:"request_time"`
 	UpstreamTime *float64 `json:"upstream_time,omitempty"`
 	Raw          string   `json:"raw"`
+	// Sub1 and Sub2 are the ISO 3166-2 codes of the subdivisions of the client
+	// and CityPoint its city with coordinates, see geolite.CityPoint.
+	Sub1      string `json:"sub1,omitempty"`
+	Sub2      string `json:"sub2,omitempty"`
+	CityPoint string `json:"city_point,omitempty"`
 }
 
 // LogFormat represents different nginx log format patterns
@@ -69,6 +74,9 @@ type GeoLocation struct {
 	C2          string
 	C3          string
 	C4          string
+	Sub1        string
+	Sub2        string
+	CityPoint   string
 }
 
 // ParseResult represents the result of parsing operation

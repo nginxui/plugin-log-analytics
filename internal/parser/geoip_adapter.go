@@ -27,5 +27,8 @@ func (a *GeoLiteAdapter) Search(ip string) (*GeoLocation, error) {
 		C2:         location.C2,
 		C3:         location.C3,
 		C4:         location.C4,
+		Sub1:       location.Sub1,
+		Sub2:       location.Sub2,
+		CityPoint:  location.CityPoint,
 	}, nil
 }

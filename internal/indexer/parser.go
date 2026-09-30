@@ -247,6 +247,9 @@ func convertToLogDocument(entry *parser.AccessLogEntry, filePath, mainLogPath st
 		DeviceType:  entry.DeviceType,
 		RequestTime: entry.RequestTime,
 		Raw:         entry.Raw,
+		Sub1:        entry.Sub1,
+		Sub2:        entry.Sub2,
+		CityPoint:   entry.CityPoint,
 		FilePath:    filePath,
 		MainLogPath: mainLogPath,
 	}

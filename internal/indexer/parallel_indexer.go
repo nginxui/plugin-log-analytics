@@ -688,6 +688,15 @@ func (w *indexWorker) logDocumentToMap(doc *LogDocument) map[string]interface{} 
 	if doc.Level != "" {
 		docMap["level"] = doc.Level
 	}
+	if doc.Sub1 != "" {
+		docMap["sub1"] = doc.Sub1
+	}
+	if doc.Sub2 != "" {
+		docMap["sub2"] = doc.Sub2
+	}
+	if doc.CityPoint != "" {
+		docMap["city_point"] = doc.CityPoint
+	}
 	if doc.RequestTime > 0 {
 		docMap["request_time"] = doc.RequestTime
 	}

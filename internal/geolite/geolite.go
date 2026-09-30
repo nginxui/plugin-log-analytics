@@ -2,6 +2,7 @@ package geolite
 
 import (
 	"fmt"
+	"math"
 	"net/netip"
 	"strings"
 	"sync"
@@ -17,6 +18,13 @@ type IPLocation struct {
 	C2         string `json:"c2,omitempty"`
 	C3         string `json:"c3,omitempty"`
 	C4         string `json:"c4,omitempty"`
+	// Sub1 and Sub2 are the ISO 3166-2 codes of the first two subdivision
+	// levels, like US-CA or FR-IDF and FR-75. Empty when the database has none.
+	Sub1 string `json:"sub1,omitempty"`
+	Sub2 string `json:"sub2,omitempty"`
+	// CityPoint is the city with its coordinates for the hotspot map, see
+	// CityPoint. Empty without coordinates.
+	CityPoint string `json:"city_point,omitempty"`
 }
 
 type Service struct {
@@ -38,9 +46,15 @@ type mmdbCountry struct {
 }
 
 type mmdbProvince struct {
-	Names  mmdbNames `maxminddb:"names"`
-	Name   string    `maxminddb:"name"`
-	NameZH string    `maxminddb:"name_zh"`
+	Names   mmdbNames `maxminddb:"names"`
+	Name    string    `maxminddb:"name"`
+	NameZH  string    `maxminddb:"name_zh"`
+	ISOCode string    `maxminddb:"iso_code"`
+}
+
+type mmdbLocation struct {
+	Latitude  *float64 `maxminddb:"latitude"`
+	Longitude *float64 `maxminddb:"longitude"`
 }
 
 type mmdbCity struct {
@@ -54,6 +68,7 @@ type mmdbRecord struct {
 	Subdivisions []mmdbProvince `maxminddb:"subdivisions"`
 	Province     mmdbProvince   `maxminddb:"province"`
 	City         mmdbCity       `maxminddb:"city"`
+	Location     mmdbLocation   `maxminddb:"location"`
 	C1           string         `maxminddb:"c1"`
 	C2           string         `maxminddb:"c2"`
 	C3           string         `maxminddb:"c3"`
@@ -169,6 +184,13 @@ func (s *Service) Search(ipStr string) (*IPLocation, error) {
 		cityEN := firstNonEmpty(record.City.Name, record.City.Names.English)
 		cityZH := firstNonEmpty(record.City.NameZH, record.City.Names.SimplifiedChinese)
 
+		country := strings.TrimSpace(record.Country.ISOCode)
+		if country == "" {
+			country = loc.RegionCode
+		}
+		loc.Sub1 = subdivisionCode(country, record.Subdivisions, 0)
+		loc.Sub2 = subdivisionCode(country, record.Subdivisions, 1)
+
 		loc.Province = provinceEN
 		loc.City = cityEN
 
@@ -184,6 +206,11 @@ func (s *Service) Search(ipStr string) (*IPLocation, error) {
 			}
 
 			loc.RegionCode = "CN"
+		}
+
+		lat, lon := record.Location.Latitude, record.Location.Longitude
+		if loc.City != "" && lat != nil && lon != nil && !math.IsNaN(*lat) && !math.IsNaN(*lon) {
+			loc.CityPoint = CityPoint(loc.RegionCode, loc.City, *lat, *lon)
 		}
 
 		return loc, nil

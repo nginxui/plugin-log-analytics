@@ -60,6 +60,8 @@ type AnalyticsRequest struct {
 	StartTime int64  `json:"start_time" form:"start_time"`
 	EndTime   int64  `json:"end_time" form:"end_time"`
 	Limit     int    `json:"limit" form:"limit"`
+	// Country is the ISO code of a country, for the region and hotspot maps.
+	Country string `json:"country" form:"country"`
 }
 
 // AdvancedSearchRequest represents the request for advanced log search

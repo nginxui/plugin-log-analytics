@@ -298,6 +298,11 @@ type LogDocument struct {
 	Raw          string   `json:"raw"`
 	// Level is the severity of an error log entry, empty for an access log line.
 	Level string `json:"level,omitempty"`
+	// Sub1 and Sub2 are the ISO 3166-2 codes of the subdivisions of the client
+	// and CityPoint its city with coordinates, for the region and hotspot maps.
+	Sub1      string `json:"sub1,omitempty"`
+	Sub2      string `json:"sub2,omitempty"`
+	CityPoint string `json:"city_point,omitempty"`
 }
 
 // IndexJob represents a single indexing job
@@ -514,6 +519,11 @@ func CreateLogIndexMapping() mapping.IndexMapping {
 	// created with this field, and the shards of existing access log groups
 	// need no rebuild.
 	addTextField("level", "keyword", storedIndexedAndSortable)
+	// The region and hotspot maps count these. Like the level they exist only
+	// in shards created with them, so older groups show them after a rebuild.
+	addTextField("sub1", "keyword", fieldOptions{index: true, docValues: true})
+	addTextField("sub2", "keyword", fieldOptions{index: true, docValues: true})
+	addTextField("city_point", "keyword", fieldOptions{index: true, docValues: true})
 
 	indexMapping.AddDocumentMapping("_default", docMapping)
 
