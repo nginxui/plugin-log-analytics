@@ -43,11 +43,12 @@ func Limit(cgroupLimit int64, hasCgroupLimit bool, totalMemory int64, hasTotalMe
 }
 
 // Apply sets the runtime memory limit to 80% of the cgroup memory limit of the
-// process, or to half of the system memory when there is no cgroup limit,
-// unless GOMEMLIMIT is set. It returns the limit it set, or zero.
+// process less what the other processes of the group hold, or to half of the
+// system memory when there is no cgroup limit, unless GOMEMLIMIT is set. It
+// returns the limit it set, or zero.
 func Apply() int64 {
 	_, envSet := os.LookupEnv(EnvGoMemLimit)
-	cgroupLimit, hasCgroup := cgroup.MemoryLimit()
+	cgroupLimit, hasCgroup := cgroup.LimitBudget()
 	total, hasTotal := cgroup.TotalMemory()
 
 	limit, apply := Limit(cgroupLimit, hasCgroup, total, hasTotal, envSet)
@@ -57,7 +58,7 @@ func Apply() int64 {
 
 	debug.SetMemoryLimit(limit)
 	if hasCgroup && cgroupLimit > 0 {
-		logger.Infof("Memory limit of the process is %d MiB, the garbage collector aims for %d MiB", cgroupLimit>>20, limit>>20)
+		logger.Infof("Memory budget of the process is %d MiB, the garbage collector aims for %d MiB", cgroupLimit>>20, limit>>20)
 	} else {
 		logger.Infof("System memory is %d MiB, the garbage collector aims for %d MiB", total>>20, limit>>20)
 	}

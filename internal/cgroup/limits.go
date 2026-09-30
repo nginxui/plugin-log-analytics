@@ -80,35 +80,70 @@ func CPUQuota() (float64, bool) {
 // is false when the cgroup does not cap memory. The group of the process and its
 // ancestors are read, and the smallest limit wins.
 func MemoryLimit() (int64, bool) {
-	var best int64
-	found := false
+	limit, _, ok := groupMemory()
+	return limit, ok
+}
 
-	read := func(path string) {
-		raw, err := os.ReadFile(path)
-		if err != nil {
+// groupMemory returns the smallest memory limit of the group of the process
+// and its ancestors, and the anonymous memory of the group that sets it. The
+// anonymous memory is -1 when the group does not report it.
+func groupMemory() (limit, anon int64, found bool) {
+	anon = -1
+	consider := func(dir, limitFile, anonField string) {
+		value, ok := readLimit(filepath.Join(dir, limitFile))
+		if !ok || (found && value >= limit) {
 			return
 		}
-		value := strings.TrimSpace(string(raw))
-		if value == "" || value == "max" {
-			return
-		}
-		limit, err := strconv.ParseInt(value, 10, 64)
-		if err != nil || limit <= 0 || limit >= maxReasonableMemoryLimit {
-			return
-		}
-		if !found || limit < best {
-			best, found = limit, true
+		limit, found = value, true
+		anon = -1
+		if used, ok := readField(filepath.Join(dir, "memory.stat"), anonField); ok {
+			anon = used
 		}
 	}
 
 	for _, dir := range groupDirs("") {
-		read(filepath.Join(dir, "memory.max")) // cgroup v2
+		consider(dir, "memory.max", "anon") // cgroup v2
 	}
 	for _, dir := range groupDirs("memory") {
-		read(filepath.Join(dir, "memory.limit_in_bytes")) // cgroup v1
+		consider(dir, "memory.limit_in_bytes", "total_rss") // cgroup v1
 	}
+	return limit, anon, found
+}
 
-	return best, found
+// readLimit parses a cgroup limit file. "max", zero and the sentinel values of
+// some kernels mean no limit.
+func readLimit(path string) (int64, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "max" {
+		return 0, false
+	}
+	limit, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || limit <= 0 || limit >= maxReasonableMemoryLimit {
+		return 0, false
+	}
+	return limit, true
+}
+
+// readField returns one value of a file of "name value" lines, such as
+// memory.stat or /proc/self/status.
+func readField(path, name string) (int64, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || strings.TrimSuffix(fields[0], ":") != name {
+			continue
+		}
+		value, err := strconv.ParseInt(fields[1], 10, 64)
+		return value, err == nil
+	}
+	return 0, false
 }
 
 // procSelfCgroup lists the cgroups of the current process. It is a variable so
@@ -176,41 +211,74 @@ func readInt64(path string) (int64, bool) {
 	return value, true
 }
 
-// totalMemory is indirected so tests can simulate a host without touching the
-// real /proc/meminfo.
-var totalMemory = func() (uint64, error) {
+// hostMemory is indirected so tests can simulate a host without touching the
+// real /proc/meminfo. It returns the total and the available system memory.
+var hostMemory = func() (total, available uint64, err error) {
 	stat, err := mem.VirtualMemory()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return stat.Total, nil
+	return stat.Total, stat.Available, nil
+}
+
+// procSelfStatus is the status file of the current process. It is a variable
+// so tests can point it at a fixture file.
+var procSelfStatus = "/proc/self/status"
+
+// ownAnonymousMemory returns the anonymous memory this process holds, zero
+// where it cannot be read.
+func ownAnonymousMemory() int64 {
+	kb, ok := readField(procSelfStatus, "RssAnon")
+	if !ok {
+		return 0
+	}
+	return kb * 1024
 }
 
 // TotalMemory returns the total system memory in bytes, ignoring cgroup limits.
 // The second return value is false when it cannot be read.
 func TotalMemory() (int64, bool) {
-	total, err := totalMemory()
+	total, _, err := hostMemory()
 	if err != nil || total == 0 || total > uint64(maxReasonableMemoryLimit) {
 		return 0, false
 	}
 	return int64(total), true
 }
 
+// LimitBudget returns the cgroup memory limit less the anonymous memory the
+// other processes of the group hold, such as nginx-ui itself. The second
+// return value is false when the cgroup does not cap memory.
+func LimitBudget() (int64, bool) {
+	limit, anon, ok := groupMemory()
+	if !ok {
+		return 0, false
+	}
+	if others := anon - ownAnonymousMemory(); anon >= 0 && others > 0 {
+		limit -= others
+	}
+	return max(limit, 0), true
+}
+
 // AvailableMemory reports the memory budget this process should size itself
-// against: the cgroup limit when one is set, otherwise the total system memory.
-// The second return value is false when neither number is available.
+// against: the cgroup limit less what the other processes of the group hold,
+// or without a limit the available system memory plus what this process
+// holds. It never exceeds the total system memory. The second return value
+// is false when no number is available.
 func AvailableMemory() (int64, bool) {
-	limit, hasLimit := MemoryLimit()
+	budget, hasLimit := LimitBudget()
 
-	total, err := totalMemory()
+	total, available, err := hostMemory()
 	if err != nil || total == 0 || total > uint64(maxReasonableMemoryLimit) {
-		return limit, hasLimit
+		return budget, hasLimit
 	}
 
-	if hasLimit && limit < int64(total) {
-		return limit, true
+	if !hasLimit {
+		budget = int64(total)
+		if available > 0 && available < total {
+			budget = int64(available) + ownAnonymousMemory()
+		}
 	}
-	return int64(total), true
+	return min(budget, int64(total)), true
 }
 
 // AvailableCPUs reports how many CPUs may be used for sizing worker pools.

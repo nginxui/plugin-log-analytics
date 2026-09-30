@@ -16,10 +16,11 @@ func useFixtureRoot(t *testing.T) string {
 	t.Helper()
 
 	root := t.TempDir()
-	previous, previousProc := cgroupRoot, procSelfCgroup
+	previous, previousProc, previousStatus := cgroupRoot, procSelfCgroup, procSelfStatus
 	cgroupRoot = root
 	procSelfCgroup = filepath.Join(root, "proc-self-cgroup-missing")
-	t.Cleanup(func() { cgroupRoot, procSelfCgroup = previous, previousProc })
+	procSelfStatus = filepath.Join(root, "proc-self-status-missing")
+	t.Cleanup(func() { cgroupRoot, procSelfCgroup, procSelfStatus = previous, previousProc, previousStatus })
 
 	return root
 }
@@ -183,19 +184,19 @@ func TestCPUQuotaReadsTheGroupOfTheProcess(t *testing.T) {
 	assert.InDelta(t, 2.0, quota, 0.0001)
 }
 
-// stubTotalMemory replaces the host memory probe for the duration of a test.
-func stubTotalMemory(t *testing.T, total uint64, err error) {
+// stubHostMemory replaces the host memory probe for the duration of a test.
+func stubHostMemory(t *testing.T, total, available uint64, err error) {
 	t.Helper()
 
-	previous := totalMemory
-	totalMemory = func() (uint64, error) { return total, err }
-	t.Cleanup(func() { totalMemory = previous })
+	previous := hostMemory
+	hostMemory = func() (uint64, uint64, error) { return total, available, err }
+	t.Cleanup(func() { hostMemory = previous })
 }
 
 func TestAvailableMemoryPrefersCgroupLimit(t *testing.T) {
 	root := useFixtureRoot(t)
 	writeFixture(t, filepath.Join(root, "memory.max"), "536870912\n") // 512MB container
-	stubTotalMemory(t, 128<<30, nil)                                  // 128GB host
+	stubHostMemory(t, 128<<30, 0, nil)                                // 128GB host
 
 	available, ok := AvailableMemory()
 	require.True(t, ok)
@@ -204,7 +205,7 @@ func TestAvailableMemoryPrefersCgroupLimit(t *testing.T) {
 
 func TestAvailableMemoryFallsBackToHostTotal(t *testing.T) {
 	useFixtureRoot(t)
-	stubTotalMemory(t, 2<<30, nil)
+	stubHostMemory(t, 2<<30, 0, nil)
 
 	available, ok := AvailableMemory()
 	require.True(t, ok)
@@ -214,7 +215,7 @@ func TestAvailableMemoryFallsBackToHostTotal(t *testing.T) {
 func TestAvailableMemoryIgnoresLimitAboveHostTotal(t *testing.T) {
 	root := useFixtureRoot(t)
 	writeFixture(t, filepath.Join(root, "memory.max"), "137438953472\n") // 128GB
-	stubTotalMemory(t, 1<<30, nil)                                       // 1GB host
+	stubHostMemory(t, 1<<30, 0, nil)                                     // 1GB host
 
 	available, ok := AvailableMemory()
 	require.True(t, ok)
@@ -223,8 +224,41 @@ func TestAvailableMemoryIgnoresLimitAboveHostTotal(t *testing.T) {
 
 func TestAvailableMemoryUnknown(t *testing.T) {
 	useFixtureRoot(t)
-	stubTotalMemory(t, 0, assert.AnError)
+	stubHostMemory(t, 0, 0, assert.AnError)
 
 	_, ok := AvailableMemory()
 	assert.False(t, ok)
+}
+
+func TestAvailableMemoryLeavesOutTheOtherProcessesOfTheGroup(t *testing.T) {
+	root := useFixtureRoot(t)
+	writeFixture(t, filepath.Join(root, "memory.max"), "536870912\n")                  // 512 MiB
+	writeFixture(t, filepath.Join(root, "memory.stat"), "anon 125829120\nfile 1000\n") // 120 MiB
+	writeFixture(t, procSelfStatus, "Name:\tplugin\nRssAnon:\t   20480 kB\n")          // 20 MiB
+	stubHostMemory(t, 16<<30, 8<<30, nil)
+
+	available, ok := AvailableMemory()
+	require.True(t, ok)
+	assert.Equal(t, int64(412<<20), available, "the limit less 100 MiB held by the other processes")
+}
+
+func TestAvailableMemoryReadsTheV1GroupUsage(t *testing.T) {
+	root := useFixtureRoot(t)
+	writeFixture(t, filepath.Join(root, "memory", "memory.limit_in_bytes"), "1073741824\n")
+	writeFixture(t, filepath.Join(root, "memory", "memory.stat"), "rss 1\ntotal_rss 268435456\n")
+	stubHostMemory(t, 16<<30, 8<<30, nil)
+
+	available, ok := AvailableMemory()
+	require.True(t, ok)
+	assert.Equal(t, int64(768<<20), available)
+}
+
+func TestAvailableMemoryWithoutLimitUsesTheAvailableMemory(t *testing.T) {
+	useFixtureRoot(t)
+	writeFixture(t, procSelfStatus, "RssAnon:\t102400 kB\n") // 100 MiB
+	stubHostMemory(t, 4<<30, 1<<30, nil)
+
+	available, ok := AvailableMemory()
+	require.True(t, ok)
+	assert.Equal(t, int64(1124<<20), available)
 }
