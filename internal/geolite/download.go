@@ -16,7 +16,12 @@ import (
 )
 
 const (
-	DownloadURL = "http://cloud.nginxui.com/geolite/GeoLite2-City.mmdb.xz"
+	DownloadURL = "https://cloud.nginxui.com/geolite/GeoLite2-City.mmdb.xz"
+
+	// maxDownloadBytes caps the archive, which is about 19 MB.
+	maxDownloadBytes = 64 << 20
+	// maxDatabaseBytes caps the unpacked database, which is about 60 MB.
+	maxDatabaseBytes = 256 << 20
 )
 
 type DownloadProgressWriter struct {
@@ -83,7 +88,19 @@ func getCustomDBPath() string {
 // newHTTPClient returns the client used for the download. It follows the proxy
 // environment of the plugin process.
 func newHTTPClient() *http.Client {
-	return &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
+	return &http.Client{
+		Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
+		// A redirect must not leave https.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if req.URL.Scheme != "https" {
+				return fmt.Errorf("redirect to %s refused", req.URL.Scheme)
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
 }
 
 // DownloadGeoLiteDB downloads the GeoLite2 database. Canceling ctx stops the
@@ -114,6 +131,9 @@ func DownloadGeoLiteDB(ctx context.Context, progressChan chan float64) error {
 	if err != nil {
 		return apierr.WithParams(ErrFailedToGetFileSize, err.Error())
 	}
+	if totalSize > maxDownloadBytes {
+		return apierr.WithParams(ErrFailedToGetFileSize, fmt.Sprintf("the file is too large: %d bytes", totalSize))
+	}
 
 	xzPath := GetDBXZPath()
 	file, err := os.Create(xzPath)
@@ -129,7 +149,11 @@ func DownloadGeoLiteDB(ctx context.Context, progressChan chan float64) error {
 		reportInterval: 1.0, // Report every 1% change
 	}
 
-	_, err = io.Copy(progressWriter, resp.Body)
+	// One byte past the announced size tells a body that is longer.
+	written, err := io.Copy(progressWriter, io.LimitReader(resp.Body, totalSize+1))
+	if err == nil && written > totalSize {
+		err = fmt.Errorf("the server sent more than it announced")
+	}
 	if err != nil {
 		os.Remove(xzPath) // Clean up on error
 		return apierr.WithParams(ErrFailedToSaveFile, err.Error())
@@ -188,6 +212,10 @@ func DecompressGeoLiteDB(progressChan chan float64) error {
 	for {
 		n, readErr := xzReader.Read(buf)
 		if n > 0 {
+			if decompressedSize+int64(n) > maxDatabaseBytes {
+				os.Remove(tmpPath)
+				return apierr.WithParams(ErrFailedToWriteData, "the unpacked database is too large")
+			}
 			if _, writeErr := outFile.Write(buf[:n]); writeErr != nil {
 				os.Remove(tmpPath) // Clean up on error
 				return apierr.WithParams(ErrFailedToWriteData, writeErr.Error())
