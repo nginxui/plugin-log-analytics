@@ -89,3 +89,22 @@ func TestBuildQueryWithoutRangeFilters(t *testing.T) {
 		t.Error("request_time filter should not be present when no range is requested")
 	}
 }
+
+func TestBuildQueryFiltersErrorLogLevels(t *testing.T) {
+	q, err := NewQueryBuilder().BuildQuery(&SearchRequest{Levels: []string{"error"}})
+	if err != nil {
+		t.Fatalf("BuildQuery() error = %v", err)
+	}
+	fields := make(map[string]query.Query)
+	collectFieldQueries(t, q, fields)
+	levelQuery, ok := fields["level"].(*query.TermQuery)
+	if !ok || levelQuery.Term != "error" {
+		t.Fatalf("expected a term query for the level error, got %#v", fields["level"])
+	}
+
+	cache := NewCache(1 << 20)
+	defer cache.Close()
+	if cache.GenerateKey(&SearchRequest{Levels: []string{"error"}}) == cache.GenerateKey(&SearchRequest{Levels: []string{"warn"}}) {
+		t.Error("requests for other levels share a cache key")
+	}
+}
