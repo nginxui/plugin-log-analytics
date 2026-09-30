@@ -268,7 +268,7 @@ mkdir -p "${STAGE}" "${BIN}"
 
 # The manifest tool narrows plugin.json to one platform per package.
 MANIFEST_TOOL="${DIST}/.manifest-tool"
-GOWORK=off go build -o "${MANIFEST_TOOL}" ./cmd/manifest
+go build -o "${MANIFEST_TOOL}" ./cmd/manifest
 
 echo "building ${PLUGIN_ID} ${VERSION}"
 if [[ -z "${MINISIGN_KEY}" ]]; then
@@ -283,7 +283,7 @@ for platform in "${PLATFORMS[@]}"; do
   name="$(binary_name "${goos}" "${goarch}")"
 
   echo "  ${goos}/${goarch}"
-  GOWORK=off CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
     go build -trimpath -ldflags "-s -w" -o "${BIN}/${name}" .
   echo "    ${name} ($(du -h "${BIN}/${name}" | cut -f1 | tr -d '[:space:]'))"
 

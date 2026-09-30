@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/nginxui/plugin-sdk-go v0.0.0-00010101000000-000000000000
+	github.com/nginxui/plugin-sdk-go v0.1.0
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/stretchr/testify v1.12.1
@@ -93,6 +93,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-// Local path until the SDK is published.
-replace github.com/nginxui/plugin-sdk-go => ../plugin-sdk-go

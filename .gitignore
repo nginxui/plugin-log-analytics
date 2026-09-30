@@ -13,5 +13,9 @@ log-analytics-*
 node_modules/
 /webapp/
 
+# A local workspace with a checkout of the SDK, see the README
+go.work
+go.work.sum
+
 # Test leftovers
 internal/indexer/log-index/

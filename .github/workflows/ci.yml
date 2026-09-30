@@ -1,8 +1,7 @@
 name: CI
 
-# Runs on every pull request and on main. The plugin still depends on the Go
-# SDK through a `replace` to ../plugin-sdk-go, so it is checked out next to
-# this one; drop that checkout once the SDK is published. The webapp comes
+# Runs on every pull request and on main. The Go SDK is a module dependency,
+# github.com/nginxui/plugin-sdk-go. The webapp comes
 # from plugin-log-analytics-webapp: the API shape test reads its source at the
 # release that webapp.lock names, and the packages carry that release.
 on:
@@ -27,11 +26,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: plugin-log-analytics
-
-      - uses: actions/checkout@v4
-        with:
-          repository: nginxui/plugin-sdk-go
-          path: plugin-sdk-go
 
       # The API shape test reads the webapp source of the release this plugin
       # packages.

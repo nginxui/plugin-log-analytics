@@ -248,9 +248,14 @@ The API shape test checks every answer against the types the web pages
 declare, read from a checkout of `plugin-log-analytics-webapp` next to this
 repository or from `LOG_ANALYTICS_WEBAPP_DIR`.
 
-The plugin depends on
-[plugin-sdk-go](https://github.com/nginxui/plugin-sdk-go)
-through a local `replace` directive until the SDK is published.
+The plugin depends on the
+[plugin-sdk-go](https://github.com/nginxui/plugin-sdk-go) module. To work
+against a local checkout of it, create a workspace, which git ignores:
+
+```bash
+go work init . ../plugin-sdk-go
+go work edit -replace=github.com/nginxui/plugin-sdk-go@v0.1.0=../plugin-sdk-go
+```
 
 The state database uses the same GORM dialector as NGINX UI on top of a pure Go
 SQLite driver, which is what lets the plugin build without cgo.
