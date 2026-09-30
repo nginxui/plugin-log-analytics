@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -48,4 +49,15 @@ func TestEnrichErrorEntryReadsTheLine(t *testing.T) {
 
 	access := map[string]interface{}{"raw": "1.2.3.4 - - ...", "status": 200}
 	assert.Equal(t, map[string]interface{}{"raw": "1.2.3.4 - - ...", "status": 200}, enrichErrorEntry(access))
+}
+
+func TestLocalDayStartsAtTheLocalMidnight(t *testing.T) {
+	day, err := localDay("2026-10-01")
+	assert.NoError(t, err)
+	assert.Equal(t, time.Local, day.Location())
+	assert.Equal(t, "2026-10-01 00:00:00", day.Format("2006-01-02 15:04:05"))
+	assert.Equal(t, "2026-10-02 00:00:00", day.AddDate(0, 0, 1).Format("2006-01-02 15:04:05"))
+
+	_, err = localDay("2026/10/01")
+	assert.Error(t, err)
 }

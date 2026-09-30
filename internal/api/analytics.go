@@ -207,6 +207,12 @@ func GetLogPreflight(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// localDay returns the first instant of a YYYY-MM-DD day in the local zone of
+// the server.
+func localDay(value string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", value, time.Local)
+}
+
 // endAfter returns the exclusive end of a request range. The end time of a
 // request is the last second it includes, zero leaves the range open.
 func endAfter(endTime int64) int64 {
@@ -759,24 +765,24 @@ func GetDashboardAnalytics(c *gin.Context) {
 	var startTime, endTime time.Time
 	var err error
 
+	// The dates are days in the local zone of the server, like the daily and
+	// hourly buckets of the dashboard.
 	if req.StartDate != "" {
-		startTime, err = time.Parse("2006-01-02", req.StartDate)
+		startTime, err = localDay(req.StartDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid start_date format, expected YYYY-MM-DD: " + err.Error()})
 			return
 		}
-		// Convert to UTC for consistent processing
-		startTime = startTime.UTC()
 	}
 
 	if req.EndDate != "" {
-		endTime, err = time.Parse("2006-01-02", req.EndDate)
+		endTime, err = localDay(req.EndDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid end_date format, expected YYYY-MM-DD: " + err.Error()})
 			return
 		}
-		// The end date is included: the window ends at the next midnight
-		endTime = endTime.AddDate(0, 0, 1).UTC()
+		// The end date is included: the window ends at the next local midnight
+		endTime = endTime.AddDate(0, 0, 1)
 	}
 
 	// Set default time range if not provided (last 30 days)
