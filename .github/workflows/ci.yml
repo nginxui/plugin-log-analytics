@@ -50,7 +50,8 @@ jobs:
           go-version-file: plugin-log-analytics/go.mod
           cache-dependency-path: plugin-log-analytics/go.sum
 
-      # Downloads the webapp release webapp.lock names and checks its checksum.
+      # Downloads the webapp release webapp.lock names and checks it against the
+      # checksum published with it.
       # The manifest test compares its fragment with the package paths.
       - name: Take the webapp release
         run: ./build.sh --webapp-only

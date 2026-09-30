@@ -216,12 +216,12 @@ terminal.
 
 `build.sh` takes the web bundle from
 [plugin-log-analytics-webapp](https://github.com/nginxui/plugin-log-analytics-webapp),
-which both log analytics plugins share. `webapp.lock` names its release and the
-checksum of the archive. The archive is the one `--webapp` names, the one built
-in a sibling checkout (`../plugin-log-analytics-webapp/release`) or the release
-download, and the build of this plugin is unpacked into `webapp/dist`. After
-`bun run package` in the webapp, `./build.sh --update-lock` pins the new archive
-in `webapp.lock`; a build warns when the sibling archive differs from the lock.
+which both log analytics plugins share. `webapp.lock` names the version of its
+release, and only changes after a webapp release. The archive is the one
+`--webapp` names, the one built in a sibling checkout
+(`../plugin-log-analytics-webapp/release`) or the release download, checked
+against the `.sha256` file of the release, and the build of this plugin is
+unpacked into `webapp/dist`.
 
 ## Releasing
 
@@ -236,7 +236,6 @@ changelog section as its notes.
 
 ```bash
 ./build.sh --webapp-only                      # the web bundle into webapp/dist
-./build.sh --update-lock                      # pin the sibling webapp build in webapp.lock
 go run ./cmd/manifest                         # regenerate plugin.json
 go build ./... && go vet ./...
 go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with -short
