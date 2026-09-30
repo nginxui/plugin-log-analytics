@@ -14,6 +14,7 @@ import (
 	"github.com/nginxui/plugin-log-analytics/internal/analytics"
 	"github.com/nginxui/plugin-log-analytics/internal/config"
 	"github.com/nginxui/plugin-log-analytics/internal/logger"
+	"github.com/nginxui/plugin-log-analytics/internal/parser"
 	"github.com/nginxui/plugin-log-analytics/internal/searcher"
 	"github.com/nginxui/plugin-log-analytics/internal/service"
 	"github.com/nginxui/plugin-log-analytics/internal/utils"
@@ -76,6 +77,8 @@ type AdvancedSearchRequest struct {
 	Browser   string `json:"browser" form:"browser"`
 	OS        string `json:"os" form:"os"`
 	Device    string `json:"device" form:"device"`
+	// Level holds error log levels, comma separated.
+	Level     string `json:"level" form:"level"`
 	Limit     int    `json:"limit" form:"limit"`
 	Offset    int    `json:"offset" form:"offset"`
 	SortBy    string `json:"sort_by" form:"sort_by"`
@@ -315,6 +318,40 @@ func enrichEntryWithIPLocationLabel(entry map[string]interface{}, useChineseName
 	return entry
 }
 
+// enrichErrorEntry adds what the line of an error log entry says beyond the
+// indexed fields: the message, the server, the whole request, the upstream,
+// the host and the process and connection numbers. Access log entries are
+// returned unchanged.
+func enrichErrorEntry(entry map[string]interface{}) map[string]interface{} {
+	level, _ := entry["level"].(string)
+	raw, _ := entry["raw"].(string)
+	if level == "" || raw == "" {
+		return entry
+	}
+	parsed, ok := parser.ParseErrorLine(raw)
+	if !ok {
+		return entry
+	}
+	entry["message"] = parsed.Message
+	entry["server"] = parsed.Server
+	entry["request"] = parsed.Request
+	entry["upstream"] = parsed.Upstream
+	entry["host"] = parsed.Host
+	entry["pid"] = parsed.PID
+	entry["connection"] = parsed.Connection
+	return entry
+}
+
+// rejectErrorLog answers a dashboard or map request for an error log, whose
+// entries have no traffic figures. It reports whether it answered.
+func rejectErrorLog(c *gin.Context, logPath string) bool {
+	if logPath == "" || !utils.IsErrorLog(logPath) {
+		return false
+	}
+	c.JSON(http.StatusBadRequest, ErrorResponse{Error: "The dashboard and the maps are only available for access logs"})
+	return true
+}
+
 // AdvancedSearchLogs provides advanced search capabilities for logs
 func AdvancedSearchLogs(c *gin.Context) {
 	var req AdvancedSearchRequest
@@ -446,6 +483,11 @@ func AdvancedSearchLogs(c *gin.Context) {
 	if req.Device != "" {
 		searchReq.Devices = splitCommaSeparated(req.Device)
 	}
+	for _, value := range splitCommaSeparated(req.Level) {
+		if level, ok := parser.ErrorLevelOf(value); ok {
+			searchReq.Levels = append(searchReq.Levels, level)
+		}
+	}
 	if len(req.Status) > 0 {
 		searchReq.StatusCodes = req.Status
 	}
@@ -467,7 +509,7 @@ func AdvancedSearchLogs(c *gin.Context) {
 	// cache and with other requests, so the entry is a copy that can be changed.
 	entries := make([]map[string]interface{}, len(result.Hits))
 	for i, hit := range result.Hits {
-		entries[i] = enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName)
+		entries[i] = enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName))
 	}
 
 	// 2. Summary stats describe the whole match set, not the returned page
@@ -571,7 +613,7 @@ func GetLogEntries(c *gin.Context) {
 	// Convert search hits to simple entries format
 	var entries []map[string]interface{}
 	for _, hit := range result.Hits {
-		entries = append(entries, enrichEntryWithIPLocationLabel(hit.Fields, useChineseName))
+		entries = append(entries, enrichErrorEntry(enrichEntryWithIPLocationLabel(maps.Clone(hit.Fields), useChineseName)))
 	}
 
 	c.JSON(http.StatusOK, AnalyticsResponse{
@@ -691,6 +733,9 @@ func GetDashboardAnalytics(c *gin.Context) {
 			return
 		}
 		safeLogPath = decodedPath
+	}
+	if rejectErrorLog(c, safeLogPath) {
+		return
 	}
 
 	// Use default access log path if LogPath is empty
@@ -812,6 +857,9 @@ func GetWorldMapData(c *gin.Context) {
 		}
 		safeLogPath = decodedPath
 	}
+	if rejectErrorLog(c, safeLogPath) {
+		return
+	}
 
 	// Use default access log path if Path is empty
 	if safeLogPath == "" {
@@ -924,6 +972,9 @@ func GetChinaMapData(c *gin.Context) {
 			return
 		}
 		safeLogPath = decodedPath
+	}
+	if rejectErrorLog(c, safeLogPath) {
+		return
 	}
 
 	// Use default access log path if Path is empty
@@ -1170,6 +1221,9 @@ func GetChinaCityMapData(c *gin.Context) {
 		}
 		safeLogPath = decodedPath
 	}
+	if rejectErrorLog(c, safeLogPath) {
+		return
+	}
 
 	if safeLogPath == "" {
 		defaultLogPath := utils.DefaultAccessLogPath()
@@ -1261,6 +1315,9 @@ func GetGeoStats(c *gin.Context) {
 			return
 		}
 		safeLogPath = decodedPath
+	}
+	if rejectErrorLog(c, safeLogPath) {
+		return
 	}
 
 	// Use default access log path if Path is empty

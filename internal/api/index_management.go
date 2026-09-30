@@ -318,11 +318,11 @@ func rebuildSingleFile(modernIndexer interface{}, path string, logFileManager in
 
 	var minTime, maxTime *time.Time
 
-	if targetLog != nil && targetLog.Type == "error" {
-		logger.Infof("Skipping index rebuild for error log as requested: %s", path)
+	if targetLog != nil && !utils.IsIndexedLogType(targetLog.Type) {
+		logger.Infof("Skipping index rebuild for a log that is not indexed: %s", path)
 		if logFileManager != nil {
 			if err := logFileManager.(indexer.MetadataManager).SaveIndexMetadata(path, 0, time.Now(), 0, nil, nil); err != nil {
-				logger.Warnf("Could not reset metadata for skipped error log %s: %v", path, err)
+				logger.Warnf("Could not reset metadata for skipped log %s: %v", path, err)
 			}
 		}
 	} else {
@@ -438,16 +438,16 @@ func rebuildAllFiles(modernIndexer interface{}, logFileManager interface{}, prog
 		persistence = lfm.GetPersistence()
 	}
 
-	// First pass: Set all access logs to queued status
+	// First pass: Set all indexed logs to queued status
 	queuePosition := 1
-	accessLogs := make([]*service.NginxLogWithIndex, 0)
+	indexedLogs := make([]*service.NginxLogWithIndex, 0)
 
 	for _, log := range allLogs {
-		if log.Type == "error" {
-			logger.Infof("Skipping indexing for error log: %s", log.Path)
+		if !utils.IsIndexedLogType(log.Type) {
+			logger.Infof("Skipping indexing for a log that is not indexed: %s", log.Path)
 			if logFileManager != nil {
 				if err := logFileManager.(indexer.MetadataManager).SaveIndexMetadata(log.Path, 0, time.Now(), 0, nil, nil); err != nil {
-					logger.Warnf("Could not reset metadata for skipped error log %s: %v", log.Path, err)
+					logger.Warnf("Could not reset metadata for skipped log %s: %v", log.Path, err)
 				}
 			}
 			continue
@@ -460,12 +460,12 @@ func rebuildAllFiles(modernIndexer interface{}, logFileManager interface{}, prog
 			}
 		}
 
-		accessLogs = append(accessLogs, log)
+		indexedLogs = append(indexedLogs, log)
 		queuePosition++
 	}
 
-	if len(accessLogs) == 0 {
-		// Not a success: no access log group is known to the server at all, so
+	if len(indexedLogs) == 0 {
+		// Not a success: no indexed log group is known to the server at all, so
 		// the rebuild has nothing to work on. Explain why instead of letting the
 		// user read a completion message they cannot tell apart from a real one.
 		reportEmptyRebuild(len(allLogs))
@@ -490,9 +490,9 @@ func rebuildAllFiles(modernIndexer interface{}, logFileManager interface{}, prog
 	}
 	semaphore := make(chan struct{}, maxConcurrency)
 
-	logger.Infof("Processing %d log groups in parallel with concurrency=%d", len(accessLogs), maxConcurrency)
+	logger.Infof("Processing %d log groups in parallel with concurrency=%d", len(indexedLogs), maxConcurrency)
 
-	for _, log := range accessLogs {
+	for _, log := range indexedLogs {
 		wg.Add(1)
 		go func(logItem *service.NginxLogWithIndex) {
 			defer wg.Done()
@@ -571,11 +571,11 @@ func rebuildAllFiles(modernIndexer interface{}, logFileManager interface{}, prog
 	wg.Wait()
 
 	totalDuration := time.Since(startTime)
-	if len(accessLogs) == 0 {
+	if len(indexedLogs) == 0 {
 		logger.Warnf("Full modern index rebuild finished after %s without indexing anything", totalDuration)
 	} else {
 		logger.Infof("Successfully completed full modern index rebuild of %d log group(s) in %s",
-			len(accessLogs), totalDuration)
+			len(indexedLogs), totalDuration)
 	}
 
 	if err := modernIndexer.(indexer.FlushableIndexer).FlushAll(); err != nil {

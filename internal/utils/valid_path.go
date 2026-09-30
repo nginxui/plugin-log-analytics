@@ -12,6 +12,12 @@ import (
 // ErrPathNotWhitelisted answers a request for a log the host does not list.
 var ErrPathNotWhitelisted = apierr.NewScope("nginx_log").New(50014, "log path is not under whitelist")
 
+// Kinds of the log files the host lists.
+const (
+	AccessLogType = "access"
+	ErrorLogType  = "error"
+)
+
 // HostLog is one nginx log file the host lists for the plugin.
 type HostLog struct {
 	Path       string
@@ -68,11 +74,31 @@ func DefaultAccessLogPath() string {
 		return ""
 	}
 	for _, entry := range current.entries {
-		if entry.Type == "access" && entry.Source == "default" {
+		if entry.Type == AccessLogType && entry.Source == "default" {
 			return entry.Path
 		}
 	}
 	return ""
+}
+
+// IsErrorLog reports whether the host lists logPath, or the log it is a
+// rotated file of, as an error log.
+func IsErrorLog(logPath string) bool {
+	base, ok := listedBase(filepath.Clean(logPath))
+	if !ok {
+		return false
+	}
+	for _, entry := range currentHostLogs.Load().entries {
+		if entry.Path == base {
+			return entry.Type == ErrorLogType
+		}
+	}
+	return false
+}
+
+// IsIndexedLogType reports whether logs of this kind are indexed.
+func IsIndexedLogType(logType string) bool {
+	return logType == AccessLogType || logType == ErrorLogType
 }
 
 // listedBase returns the listed log path that logPath is or belongs to as a

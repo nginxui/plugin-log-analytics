@@ -685,6 +685,9 @@ func (w *indexWorker) logDocumentToMap(doc *LogDocument) map[string]interface{} 
 	if doc.DeviceType != "" {
 		docMap["device_type"] = doc.DeviceType
 	}
+	if doc.Level != "" {
+		docMap["level"] = doc.Level
+	}
 	if doc.RequestTime > 0 {
 		docMap["request_time"] = doc.RequestTime
 	}

@@ -258,6 +258,45 @@ func convertToLogDocument(entry *parser.AccessLogEntry, filePath, mainLogPath st
 	return logDoc
 }
 
+// parseLines turns a batch of lines into documents, in the order of the lines.
+// A line that does not parse leaves a nil document. Access log lines are
+// parsed in parallel, error log lines one by one since they are few and cheap.
+func parseLines(ctx context.Context, p *parser.Parser, lines []string, errorLog bool, filePath, mainLogPath string) []*LogDocument {
+	docs := make([]*LogDocument, len(lines))
+	if errorLog {
+		for i, line := range lines {
+			if entry, ok := parser.ParseErrorLine(line); ok {
+				docs[i] = convertErrorToLogDocument(entry, line, filePath, mainLogPath)
+			}
+		}
+		return docs
+	}
+	for i, entry := range p.ParseLinesOrdered(ctx, lines) {
+		if entry != nil {
+			docs[i] = convertToLogDocument(entry, filePath, mainLogPath)
+		}
+	}
+	return docs
+}
+
+// convertErrorToLogDocument builds the document of an error log entry. The
+// client, request and referrer fill the fields an access log line uses, the
+// message is searched through the raw line.
+func convertErrorToLogDocument(entry *parser.ErrorLogEntry, raw, filePath, mainLogPath string) *LogDocument {
+	return &LogDocument{
+		Timestamp:   entry.Timestamp,
+		IP:          entry.Client,
+		Method:      entry.Method,
+		Path:        entry.Path,
+		PathExact:   entry.Path,
+		Referer:     entry.Referrer,
+		Level:       entry.Level,
+		Raw:         raw,
+		FilePath:    filePath,
+		MainLogPath: mainLogPath,
+	}
+}
+
 // createReaderForFile creates appropriate reader for the file, with gzip detection
 func createReaderForFile(reader io.Reader, filePath string) (io.Reader, func(), error) {
 	// If not a .gz file, return as-is

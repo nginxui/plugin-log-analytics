@@ -70,6 +70,7 @@ type CacheKeyData struct {
 	Browsers       []string     `json:"browsers"`
 	OSs            []string     `json:"operating_systems"`
 	Devices        []string     `json:"devices"`
+	Levels         []string     `json:"levels"`
 	MinBytes       *int64       `json:"min_bytes"`
 	MaxBytes       *int64       `json:"max_bytes"`
 	MinReqTime     *float64     `json:"min_request_time"`
@@ -146,6 +147,7 @@ func (c *Cache) GenerateKey(req *SearchRequest) string {
 		Browsers:       sortedUniqueStrings(req.Browsers),
 		OSs:            sortedUniqueStrings(req.OSs),
 		Devices:        sortedUniqueStrings(req.Devices),
+		Levels:         sortedUniqueStrings(req.Levels),
 		MinBytes:       req.MinBytes,
 		MaxBytes:       req.MaxBytes,
 		MinReqTime:     req.MinReqTime,

@@ -57,6 +57,8 @@ type SearchRequest struct {
 	Browsers       []string `json:"browsers,omitempty"`
 	OSs            []string `json:"operating_systems,omitempty"`
 	Devices        []string `json:"devices,omitempty"`
+	// Levels are error log levels, lower case.
+	Levels []string `json:"levels,omitempty"`
 
 	// Range filters
 	MinBytes   *int64   `json:"min_bytes,omitempty"`

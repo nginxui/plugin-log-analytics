@@ -12,6 +12,7 @@ import (
 	"github.com/nginxui/plugin-log-analytics/internal/hub"
 	"github.com/nginxui/plugin-log-analytics/internal/indexer"
 	"github.com/nginxui/plugin-log-analytics/internal/logger"
+	"github.com/nginxui/plugin-log-analytics/internal/utils"
 )
 
 // TaskScheduler manages all indexing tasks (recovery, manual rebuild, etc.)
@@ -426,8 +427,7 @@ func (ts *TaskScheduler) RecoverUnfinishedTasks(ctx context.Context) error {
 
 	// Get all logs with their index status
 	allLogs := GetAllLogsWithIndexGrouped(func(log *NginxLogWithIndex) bool {
-		// Only process access logs
-		return log.Type == "access"
+		return utils.IsIndexedLogType(log.Type)
 	})
 
 	var incompleteTasksCount int

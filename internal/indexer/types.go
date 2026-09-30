@@ -296,6 +296,8 @@ type LogDocument struct {
 	FilePath     string   `json:"file_path"`     // Actual physical file path (e.g., /var/log/nginx/access.log.1.gz)
 	MainLogPath  string   `json:"main_log_path"` // Main log group path (e.g., /var/log/nginx/access.log)
 	Raw          string   `json:"raw"`
+	// Level is the severity of an error log entry, empty for an access log line.
+	Level string `json:"level,omitempty"`
 }
 
 // IndexJob represents a single indexing job
@@ -507,6 +509,7 @@ func CreateLogIndexMapping() mapping.IndexMapping {
 	addTextField("raw", "standard", storedAndIndexed)
 	addTextField("file_path", "keyword", storedAndIndexed)
 	addTextField("main_log_path", "keyword", storedAndIndexed)
+	addTextField("level", "keyword", storedIndexedAndSortable)
 
 	indexMapping.AddDocumentMapping("_default", docMapping)
 

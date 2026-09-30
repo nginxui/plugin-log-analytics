@@ -117,8 +117,7 @@ func performIncrementalIndexing() {
 
 	// Get all log groups to check for changes
 	allLogs := GetAllLogsWithIndexGrouped(func(log *NginxLogWithIndex) bool {
-		// Only process access logs (skip error logs as they are not indexed)
-		return log.Type == "access"
+		return utils.IsIndexedLogType(log.Type)
 	})
 
 	// Decide first, so a round with nothing to do opens neither the parser nor

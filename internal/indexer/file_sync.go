@@ -331,7 +331,7 @@ func (pi *ParallelIndexer) syncFile(ctx context.Context, filePath, mainLogPath s
 	}
 	defer closeStream()
 
-	offset, docs, minTime, maxTime, err := pi.indexStream(ctx, parserInstance, stream, compressed, start, fingerprint, filePath, mainLogPath, opts)
+	offset, docs, minTime, maxTime, err := pi.indexStream(ctx, parserInstance, stream, compressed, start, fingerprint, filePath, mainLogPath, utils.IsErrorLog(mainLogPath), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -347,8 +347,9 @@ func (pi *ParallelIndexer) syncFile(ctx context.Context, filePath, mainLogPath s
 // the content, and indexes them. It returns the offset after the last line
 // that was consumed. An unterminated last line is consumed only in a
 // compressed file, because a plain file may still be growing and the rest of
-// the line is written later.
-func (pi *ParallelIndexer) indexStream(ctx context.Context, p *parser.Parser, stream io.Reader, compressed bool, start int64, fingerprint, filePath, mainLogPath string, opts syncOptions) (int64, uint64, *time.Time, *time.Time, error) {
+// the line is written later. The lines of an error log are read as error
+// entries.
+func (pi *ParallelIndexer) indexStream(ctx context.Context, p *parser.Parser, stream io.Reader, compressed bool, start int64, fingerprint, filePath, mainLogPath string, errorLog bool, opts syncOptions) (int64, uint64, *time.Time, *time.Time, error) {
 	reader := bufio.NewReaderSize(stream, syncReadBuffer)
 	batch := pi.StartBatch()
 	idPrefix := fingerprint[:docIDFingerprintLen] + "-"
@@ -372,15 +373,14 @@ func (pi *ParallelIndexer) indexStream(ctx context.Context, p *parser.Parser, st
 			if len(lines) == 0 {
 				return nil
 			}
-			entries := p.ParseLinesOrdered(ctx, lines)
+			docsOfLines := parseLines(ctx, p, lines, errorLog, filePath, mainLogPath)
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			for i, entry := range entries {
-				if entry == nil {
+			for i, doc := range docsOfLines {
+				if doc == nil {
 					continue
 				}
-				doc := convertToLogDocument(entry, filePath, mainLogPath)
 				if !isValidLogEntry(doc) {
 					invalid++
 					continue

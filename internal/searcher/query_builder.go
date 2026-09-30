@@ -128,6 +128,13 @@ func (qb *QueryBuilder) BuildQuery(req *SearchRequest) (query.Query, error) {
 		}
 	}
 
+	// Add error log level filters
+	if len(req.Levels) > 0 {
+		if levelQuery := qb.buildTermsQuery("level", req.Levels); levelQuery != nil {
+			boolQuery.AddMust(levelQuery)
+		}
+	}
+
 	// Add bytes-sent range filter
 	if req.MinBytes != nil || req.MaxBytes != nil {
 		if bytesQuery := qb.buildNumericRangeQuery("bytes_sent", toFloatPtr(req.MinBytes), toFloatPtr(req.MaxBytes)); bytesQuery != nil {

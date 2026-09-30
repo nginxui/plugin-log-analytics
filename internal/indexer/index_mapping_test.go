@@ -56,6 +56,7 @@ func TestCreateLogIndexMappingUsesOnlyRequiredIndexFeatures(t *testing.T) {
 		{name: "raw", store: true, index: true},
 		{name: "file_path", store: true, index: true},
 		{name: "main_log_path", store: true, index: true},
+		{name: "level", store: true, index: true, docValues: true},
 	}
 
 	for _, tt := range tests {
