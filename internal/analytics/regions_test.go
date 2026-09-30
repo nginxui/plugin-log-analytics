@@ -47,6 +47,8 @@ func TestRegionSharesCountBothLevelsAndCityPointsCarryCoordinates(t *testing.T) 
 		byCode[share.Code] = share
 	}
 	assert.Equal(t, 2, byCode["FR-IDF"].Value)
+	assert.Equal(t, 1, byCode["FR-IDF"].Level)
+	assert.Equal(t, 2, byCode["FR-75"].Level)
 	assert.InDelta(t, 66.67, byCode["FR-75"].Percent, 0.01)
 	assert.Equal(t, 1, byCode["FR-69"].Value)
 	assert.NotContains(t, byCode, "US-CA", "another country is left out")

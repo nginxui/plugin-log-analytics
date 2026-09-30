@@ -39,17 +39,24 @@ func (s *service) GetRegionShares(ctx context.Context, req *GeoQueryRequest, cou
 		return nil, fmt.Errorf("failed to count the regions: %w", err)
 	}
 
-	counts := map[string]int{}
-	for _, field := range []string{"sub1", "sub2"} {
+	// A code counted at both levels keeps the level it was first seen at
+	byCode := map[string]*RegionShare{}
+	for level, field := range []string{"sub1", "sub2"} {
 		if facet := result.Facets[field]; facet != nil {
 			for _, term := range facet.Terms {
-				counts[term.Term] += term.Count
+				share := byCode[term.Term]
+				if share == nil {
+					share = &RegionShare{Code: term.Term, Level: level + 1}
+					byCode[term.Term] = share
+				}
+				share.Value += term.Count
 			}
 		}
 	}
-	shares := make([]RegionShare, 0, len(counts))
-	for code, count := range counts {
-		shares = append(shares, RegionShare{Code: code, Value: count, Percent: percentOf(count, int(result.TotalHits))})
+	shares := make([]RegionShare, 0, len(byCode))
+	for _, share := range byCode {
+		share.Percent = percentOf(share.Value, int(result.TotalHits))
+		shares = append(shares, *share)
 	}
 	sort.Slice(shares, func(i, j int) bool {
 		if shares[i].Value != shares[j].Value {

@@ -175,9 +175,11 @@ type GeoQueryRequest struct {
 }
 
 // RegionShare is the count of one subdivision of a country, keyed by its ISO
-// 3166-2 code, with its share of all requests of the country.
+// 3166-2 code, with its share of all requests of the country. Level is 1 for
+// the first subdivision and 2 for the second.
 type RegionShare struct {
 	Code    string  `json:"code"`
+	Level   int     `json:"level"`
 	Value   int     `json:"value"`
 	Percent float64 `json:"percent"`
 }
