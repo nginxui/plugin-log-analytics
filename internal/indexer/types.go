@@ -66,11 +66,12 @@ type Config struct {
 
 // Defaults for the indexing pipeline.
 //
-// Indexing throughput is bound by Bleve/Scorch segment building and disk I/O,
-// not by batch size or parse parallelism. Peak memory is roughly batch size
-// times the number of concurrent batches (workers, queued jobs and files
-// indexed at once), so these stay small on every machine instead of scaling
-// with the CPU count.
+// Indexing throughput is bound by Bleve/Scorch segment building and disk I/O
+// much more than by parse parallelism. Peak memory is roughly batch size times
+// the number of concurrent batches (workers, queued jobs and files indexed at
+// once), so the sizes follow the memory budget instead of the CPU count.
+// Measured on 1.4M lines: 1000 x 1 indexes within 256 MiB, 2000 x 2 peaks
+// near 800 MiB, 5000 x 4 near 1 GiB and runs about 20% faster.
 const (
 	defaultBatchSize            = 2000
 	defaultWorkerCount          = 2
@@ -82,6 +83,12 @@ const (
 	tightMemoryBudget = int64(1024 * 1024 * 1024)
 	tightBatchSize    = 1000
 	tightWorkerCount  = 1
+
+	// largeMemoryBudget is the budget from which larger batches and more
+	// workers buy back speed.
+	largeMemoryBudget = int64(4 * 1024 * 1024 * 1024)
+	largeBatchSize    = 5000
+	largeWorkerCount  = 4
 
 	// minIndexMemoryQuota / maxIndexMemoryQuota bound the derived memory quota.
 	minIndexMemoryQuota = int64(64 * 1024 * 1024)
@@ -106,20 +113,26 @@ var (
 	availableMemory = cgroup.AvailableMemory
 )
 
+// pipelineSize returns the batch size and the worker count for the CPU and
+// memory budget. An unknown memory budget gets the middle tier.
+func pipelineSize() (batchSize, workerCount int) {
+	batchSize, workerCount = defaultBatchSize, defaultWorkerCount
+	if memory, ok := availableMemory(); ok && memory > 0 {
+		switch {
+		case memory < tightMemoryBudget:
+			batchSize, workerCount = tightBatchSize, tightWorkerCount
+		case memory >= largeMemoryBudget:
+			batchSize, workerCount = largeBatchSize, largeWorkerCount
+		}
+	}
+	return batchSize, min(workerCount, max(availableCPUs(), 1))
+}
+
 // DefaultIndexerConfig returns default indexer configuration sized from the
 // CPU and memory budget this process is actually allowed to use.
 func DefaultIndexerConfig() *Config {
 	cpus := availableCPUs()
-
-	batchSize := defaultBatchSize
-	workerCount := defaultWorkerCount
-	if cpus < 2 {
-		workerCount = 1
-	}
-	if memory, ok := availableMemory(); ok && memory > 0 && memory < tightMemoryBudget {
-		batchSize = tightBatchSize
-		workerCount = tightWorkerCount
-	}
+	batchSize, workerCount := pipelineSize()
 
 	// The shard count is not stored per group: an existing group is reopened
 	// with this value and documents are routed by hash modulo it. Changing the

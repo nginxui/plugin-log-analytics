@@ -9,8 +9,8 @@ func TestThroughputOptimizations(t *testing.T) {
 
 	t.Run("BoundedBatchSizes", func(t *testing.T) {
 		// Batch size times concurrency sets the peak memory, so it stays small.
-		if config.BatchSize < 1 || config.BatchSize > defaultBatchSize {
-			t.Errorf("Expected batch size in [1, %d], got %d", defaultBatchSize, config.BatchSize)
+		if config.BatchSize < 1 || config.BatchSize > largeBatchSize {
+			t.Errorf("Expected batch size in [1, %d], got %d", largeBatchSize, config.BatchSize)
 		}
 		t.Logf("Batch size: %d", config.BatchSize)
 	})

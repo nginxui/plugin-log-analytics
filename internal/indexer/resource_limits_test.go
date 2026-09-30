@@ -33,13 +33,13 @@ func TestDefaultIndexerConfigRespectsContainerCPUBudget(t *testing.T) {
 
 	assert.Equal(t, 1, config.WorkerCount, "a single-core container gets one worker")
 	assert.Equal(t, 1, config.FileGroupConcurrency, "a single-core container must index one file at a time")
-	assert.Equal(t, defaultBatchSize, config.BatchSize)
+	assert.Equal(t, largeBatchSize, config.BatchSize)
 	assert.Equal(t, 1, config.ShardCount)
 }
 
-func TestDefaultIndexerConfigIsSmallOnEveryMachine(t *testing.T) {
+func TestDefaultIndexerConfigDoesNotScaleWithCPUs(t *testing.T) {
 	for _, cpus := range []int{2, 4, 8, 64} {
-		stubResourceBudget(t, cpus, 256*1024*1024*1024, true)
+		stubResourceBudget(t, cpus, 2*1024*1024*1024, true)
 
 		config := DefaultIndexerConfig()
 
@@ -67,6 +67,20 @@ func TestDefaultIndexerConfigTightensBelowOneGiB(t *testing.T) {
 
 	stubResourceBudget(t, 8, 0, false)
 	assert.Equal(t, 2000, DefaultIndexerConfig().BatchSize, "an unknown budget uses the regular defaults")
+}
+
+func TestDefaultIndexerConfigGrowsFromFourGiB(t *testing.T) {
+	stubResourceBudget(t, 8, 4*1024*1024*1024, true)
+	config := DefaultIndexerConfig()
+	assert.Equal(t, 5000, config.BatchSize)
+	assert.Equal(t, 4, config.WorkerCount)
+	assert.Equal(t, 1, config.FileGroupConcurrency)
+
+	stubResourceBudget(t, 2, 64*1024*1024*1024, true)
+	assert.Equal(t, 2, DefaultIndexerConfig().WorkerCount, "workers never exceed the CPUs")
+
+	stubResourceBudget(t, 8, 4*1024*1024*1024-1, true)
+	assert.Equal(t, 2000, DefaultIndexerConfig().BatchSize, "just below 4 GiB stays in the middle tier")
 }
 
 // TestDefaultMemoryQuotaFollowsContainerLimit checks that the indexer

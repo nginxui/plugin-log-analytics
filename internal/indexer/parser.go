@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/nginxui/plugin-log-analytics/internal/cgroup"
 	"github.com/nginxui/plugin-log-analytics/internal/geolite"
 	"github.com/nginxui/plugin-log-analytics/internal/logger"
 	"github.com/nginxui/plugin-log-analytics/internal/parser"
@@ -47,15 +46,6 @@ func SetGeoIPService(service parser.GeoIPService) {
 	geoIPOverride = service
 }
 
-// maxParserWorkerCount caps the per-file parse fan-out. Parsing is only one
-// stage of the pipeline, so more workers do not raise throughput, they only
-// keep more parse buffers alive.
-const maxParserWorkerCount = 2
-
-// parserBatchSize is the number of lines parsed and handed on at once. It
-// equals the default indexer batch size, so a file holds a small batch.
-const parserBatchSize = defaultBatchSize
-
 // InitLogParser initializes the global parser once (singleton).
 func InitLogParser() {
 	parserInitMu.Lock()
@@ -68,23 +58,11 @@ func InitLogParser() {
 	// Initialize the parser with production-ready configuration
 	config := parser.DefaultParserConfig()
 	config.MaxLineLength = 16 * 1024 // 16KB for large log lines
-	config.BatchSize = parserBatchSize
+	// The parse batch and fan-out follow the indexer, so a file holds no more
+	// than one indexer batch in flight per worker.
+	batchSize, workerCount := pipelineSize()
+	config.BatchSize = batchSize
 
-	// Derive parser worker count from the CPUs this process may actually use,
-	// with a small cap so that small machines are not overwhelmed.
-	//
-	// cgroup.AvailableCPUs, not GOMAXPROCS: inside an LXC/Docker container the
-	// affinity mask reports every host CPU while the cgroup bandwidth
-	// controller throttles the process to a fraction of one, so GOMAXPROCS
-	// would start up to 16 parse goroutines per file on a container that is
-	// only allowed a single core.
-	workerCount := cgroup.AvailableCPUs()
-	if workerCount < 1 {
-		workerCount = 1
-	}
-	if workerCount > maxParserWorkerCount {
-		workerCount = maxParserWorkerCount
-	}
 	config.WorkerCount = workerCount
 	// Note: Caching is handled by the CachedUserAgentParser
 
