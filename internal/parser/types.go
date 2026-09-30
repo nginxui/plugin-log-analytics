@@ -98,7 +98,7 @@ func DefaultParserConfig() *Config {
 	return &Config{
 		BufferSize:    64 * 1024, // 64KB
 		BatchSize:     1000,
-		WorkerCount:   4,
+		WorkerCount:   2,
 		EnableGeoIP:   true,
 		EnableUA:      true,
 		TimeLayout:    "02/Jan/2006:15:04:05 -0700",

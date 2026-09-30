@@ -48,8 +48,13 @@ func SetGeoIPService(service parser.GeoIPService) {
 }
 
 // maxParserWorkerCount caps the per-file parse fan-out. Parsing is only one
-// stage of the pipeline, and every worker keeps a parse buffer alive.
-const maxParserWorkerCount = 8
+// stage of the pipeline, so more workers do not raise throughput, they only
+// keep more parse buffers alive.
+const maxParserWorkerCount = 2
+
+// parserBatchSize is the number of lines parsed and handed on at once. It
+// equals the default indexer batch size, so a file holds a small batch.
+const parserBatchSize = defaultBatchSize
 
 // InitLogParser initializes the global parser once (singleton).
 func InitLogParser() {
@@ -63,11 +68,10 @@ func InitLogParser() {
 	// Initialize the parser with production-ready configuration
 	config := parser.DefaultParserConfig()
 	config.MaxLineLength = 16 * 1024 // 16KB for large log lines
-	config.BatchSize = 15000         // Maximum batch size for highest frontend throughput
+	config.BatchSize = parserBatchSize
 
 	// Derive parser worker count from the CPUs this process may actually use,
-	// with sane limits so that small machines are not overwhelmed while larger
-	// hosts can still use parallel parsing effectively.
+	// with a small cap so that small machines are not overwhelmed.
 	//
 	// cgroup.AvailableCPUs, not GOMAXPROCS: inside an LXC/Docker container the
 	// affinity mask reports every host CPU while the cgroup bandwidth
@@ -75,8 +79,8 @@ func InitLogParser() {
 	// would start up to 16 parse goroutines per file on a container that is
 	// only allowed a single core.
 	workerCount := cgroup.AvailableCPUs()
-	if workerCount < 2 {
-		workerCount = 2
+	if workerCount < 1 {
+		workerCount = 1
 	}
 	if workerCount > maxParserWorkerCount {
 		workerCount = maxParserWorkerCount

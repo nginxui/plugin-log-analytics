@@ -186,6 +186,16 @@ var totalMemory = func() (uint64, error) {
 	return stat.Total, nil
 }
 
+// TotalMemory returns the total system memory in bytes, ignoring cgroup limits.
+// The second return value is false when it cannot be read.
+func TotalMemory() (int64, bool) {
+	total, err := totalMemory()
+	if err != nil || total == 0 || total > uint64(maxReasonableMemoryLimit) {
+		return 0, false
+	}
+	return int64(total), true
+}
+
 // AvailableMemory reports the memory budget this process should size itself
 // against: the cgroup limit when one is set, otherwise the total system memory.
 // The second return value is false when neither number is available.

@@ -27,35 +27,46 @@ func stubResourceBudget(t *testing.T, cpus int, memoryBytes int64, memoryKnown b
 // advertises the whole host, and sizing the pools from the host number is what
 // turned the post-upgrade index rebuild into an OOM.
 func TestDefaultIndexerConfigRespectsContainerCPUBudget(t *testing.T) {
-	stubResourceBudget(t, 1, 512*1024*1024, true)
+	stubResourceBudget(t, 1, 8*1024*1024*1024, true)
 
 	config := DefaultIndexerConfig()
 
-	assert.Equal(t, 2, config.WorkerCount, "worker count must not exceed the small-container floor")
+	assert.Equal(t, 1, config.WorkerCount, "a single-core container gets one worker")
 	assert.Equal(t, 1, config.FileGroupConcurrency, "a single-core container must index one file at a time")
-	assert.Equal(t, 15000, config.BatchSize, "batch size must use the smallest tier on a single core")
+	assert.Equal(t, defaultBatchSize, config.BatchSize)
 	assert.Equal(t, 1, config.ShardCount)
 }
 
-func TestDefaultIndexerConfigCapsLargeHosts(t *testing.T) {
-	stubResourceBudget(t, 64, 256*1024*1024*1024, true)
+func TestDefaultIndexerConfigIsSmallOnEveryMachine(t *testing.T) {
+	for _, cpus := range []int{2, 4, 8, 64} {
+		stubResourceBudget(t, cpus, 256*1024*1024*1024, true)
 
-	config := DefaultIndexerConfig()
+		config := DefaultIndexerConfig()
 
-	assert.LessOrEqual(t, config.WorkerCount, maxDefaultWorkerCount)
-	assert.LessOrEqual(t, config.FileGroupConcurrency, maxDefaultFileGroupConcurrency)
-	assert.LessOrEqual(t, config.MemoryQuota, maxIndexMemoryQuota)
+		assert.Equal(t, 2, config.WorkerCount, "cpus=%d", cpus)
+		assert.Equal(t, 1, config.FileGroupConcurrency, "cpus=%d", cpus)
+		assert.Equal(t, 2000, config.BatchSize, "cpus=%d", cpus)
+		assert.Equal(t, 4, config.MaxQueueSize, "cpus=%d", cpus)
+		assert.LessOrEqual(t, config.MemoryQuota, maxIndexMemoryQuota)
+	}
 }
 
-func TestDefaultIndexerConfigScalesBetweenExtremes(t *testing.T) {
-	stubResourceBudget(t, 4, 8*1024*1024*1024, true)
+func TestDefaultIndexerConfigTightensBelowOneGiB(t *testing.T) {
+	stubResourceBudget(t, 8, 512*1024*1024, true)
 
 	config := DefaultIndexerConfig()
 
-	assert.Equal(t, 4, config.WorkerCount)
-	assert.Equal(t, 2, config.FileGroupConcurrency)
-	assert.Equal(t, 18000, config.BatchSize)
-	assert.Equal(t, max(4, config.WorkerCount*2), config.MaxQueueSize)
+	assert.Equal(t, 1000, config.BatchSize)
+	assert.Equal(t, 1, config.WorkerCount)
+	assert.Equal(t, 1, config.FileGroupConcurrency)
+	assert.Equal(t, 4, config.MaxQueueSize)
+	assert.Equal(t, DefaultMemoryQuota(), config.MemoryQuota)
+
+	stubResourceBudget(t, 8, 1024*1024*1024, true)
+	assert.Equal(t, 2000, DefaultIndexerConfig().BatchSize, "exactly 1 GiB is not tight")
+
+	stubResourceBudget(t, 8, 0, false)
+	assert.Equal(t, 2000, DefaultIndexerConfig().BatchSize, "an unknown budget uses the regular defaults")
 }
 
 // TestDefaultMemoryQuotaFollowsContainerLimit checks that the indexer

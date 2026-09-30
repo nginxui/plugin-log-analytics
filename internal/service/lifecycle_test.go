@@ -289,3 +289,25 @@ func TestExpandLogGroupPathOnlyReturnsListedGroups(t *testing.T) {
 		filepath.Join(dir, "access.log.2.gz"),
 	}, files, "the stray sibling and the unlisted log are not part of the group")
 }
+
+func TestMemoryGoesBackOnceWhenTheLastRoundEnds(t *testing.T) {
+	env := startLifecycleEnv(t, 20)
+
+	// Keep the shards loaded so the round end takes the plain free path.
+	release, err := AcquireQuery(context.Background())
+	require.NoError(t, err)
+	defer release()
+
+	before := env.freed.Load()
+	first := BeginRound(false)
+	second := BeginRound(false)
+
+	first()
+	assert.Equal(t, before, env.freed.Load(), "another round is still running")
+
+	second()
+	assert.Equal(t, before+1, env.freed.Load(), "the last round hands the memory back once")
+
+	second()
+	assert.Equal(t, before+1, env.freed.Load(), "ending a round twice changes nothing")
+}

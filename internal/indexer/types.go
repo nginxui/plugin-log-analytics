@@ -64,15 +64,24 @@ type Config struct {
 	LazyShardLoad bool `json:"lazy_shard_load"`
 }
 
-// Absolute ceilings for the derived defaults.
+// Defaults for the indexing pipeline.
 //
-// Indexing throughput is bounded by Bleve/Scorch segment building and disk I/O
-// long before it is bounded by parse parallelism, so scaling these linearly
-// with the CPU count only multiplies peak memory. The caps keep a 64-core host
-// from opening dozens of buffered batches at once.
+// Indexing throughput is bound by Bleve/Scorch segment building and disk I/O,
+// not by batch size or parse parallelism. Peak memory is roughly batch size
+// times the number of concurrent batches (workers, queued jobs and files
+// indexed at once), so these stay small on every machine instead of scaling
+// with the CPU count.
 const (
-	maxDefaultWorkerCount          = 8
-	maxDefaultFileGroupConcurrency = 4
+	defaultBatchSize            = 2000
+	defaultWorkerCount          = 2
+	defaultFileGroupConcurrency = 1
+	defaultMaxQueueSize         = 4
+
+	// tightMemoryBudget is the budget below which the batch and the worker
+	// pool shrink once more.
+	tightMemoryBudget = int64(1024 * 1024 * 1024)
+	tightBatchSize    = 1000
+	tightWorkerCount  = 1
 
 	// minIndexMemoryQuota / maxIndexMemoryQuota bound the derived memory quota.
 	minIndexMemoryQuota = int64(64 * 1024 * 1024)
@@ -102,24 +111,19 @@ var (
 func DefaultIndexerConfig() *Config {
 	cpus := availableCPUs()
 
-	// Dynamically scale batch size based on usable CPU cores
-	baseBatchSize := 15000
-	if cpus >= 16 {
-		baseBatchSize = 25000 // High-core systems (16+ cores) - maximum throughput
-	} else if cpus >= 8 {
-		baseBatchSize = 20000 // Mid-range systems (8-15 cores) - high throughput
-	} else if cpus >= 4 {
-		baseBatchSize = 18000 // Standard systems (4-7 cores) - good throughput
+	batchSize := defaultBatchSize
+	workerCount := defaultWorkerCount
+	if cpus < 2 {
+		workerCount = 1
+	}
+	if memory, ok := availableMemory(); ok && memory > 0 && memory < tightMemoryBudget {
+		batchSize = tightBatchSize
+		workerCount = tightWorkerCount
 	}
 
-	// Derive conservative, CPU-aware defaults to avoid oversubscribing small machines.
-	workerCount := clampInt(cpus, 2, maxDefaultWorkerCount)
-
-	// Limit file-level concurrency to at most half of the usable CPUs. Every
-	// concurrent file holds its own parse batch plus a buffered index batch, so
-	// this factor multiplies peak memory directly.
-	fileGroupConcurrency := clampInt(cpus/2, 1, maxDefaultFileGroupConcurrency)
-
+	// The shard count is not stored per group: an existing group is reopened
+	// with this value and documents are routed by hash modulo it. Changing the
+	// rule would hide or misroute data in indexes built earlier, so it stays.
 	shardCount := 1
 	if cpus >= 8 {
 		shardCount = 2
@@ -128,16 +132,16 @@ func DefaultIndexerConfig() *Config {
 	return &Config{
 		IndexPath:            "./log-index",
 		ShardCount:           shardCount,
-		WorkerCount:          workerCount,   // One worker per usable CPU, capped (min 2)
-		BatchSize:            baseBatchSize, // Dynamically scaled based on usable CPU cores
+		WorkerCount:          workerCount,
+		BatchSize:            batchSize,
 		FlushInterval:        5 * time.Second,
-		MaxQueueSize:         max(4, workerCount*2),
+		MaxQueueSize:         defaultMaxQueueSize,
 		EnableCompression:    true,
 		MemoryQuota:          DefaultMemoryQuota(),
 		MaxSegmentSize:       64 * 1024 * 1024, // 64MB
 		OptimizeInterval:     30 * time.Minute,
 		EnableMetrics:        true,
-		FileGroupConcurrency: fileGroupConcurrency, // Default: up to 50% of usable CPUs, capped
+		FileGroupConcurrency: defaultFileGroupConcurrency,
 	}
 }
 
@@ -162,16 +166,6 @@ func DefaultMemoryQuota() int64 {
 		quota = maxIndexMemoryQuota
 	}
 	return quota
-}
-
-func clampInt(value, minValue, maxValue int) int {
-	if value < minValue {
-		return minValue
-	}
-	if value > maxValue {
-		return maxValue
-	}
-	return value
 }
 
 // GetConfig returns configuration optimized for specific scenarios

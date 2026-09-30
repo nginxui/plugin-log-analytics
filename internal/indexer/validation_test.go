@@ -5,15 +5,14 @@ import (
 )
 
 func TestThroughputOptimizations(t *testing.T) {
-	// Test that batch sizes have been properly increased
 	config := DefaultIndexerConfig()
 
-	t.Run("IncreasedBatchSizes", func(t *testing.T) {
-		// Verify that batch sizes are significantly increased
-		if config.BatchSize < 15000 {
-			t.Errorf("Expected batch size >= 15000, got %d", config.BatchSize)
+	t.Run("BoundedBatchSizes", func(t *testing.T) {
+		// Batch size times concurrency sets the peak memory, so it stays small.
+		if config.BatchSize < 1 || config.BatchSize > defaultBatchSize {
+			t.Errorf("Expected batch size in [1, %d], got %d", defaultBatchSize, config.BatchSize)
 		}
-		t.Logf("✅ Batch size optimized: %d", config.BatchSize)
+		t.Logf("Batch size: %d", config.BatchSize)
 	})
 }
 
@@ -23,12 +22,6 @@ func TestParserBatchSizeOptimization(t *testing.T) {
 		// We'll test this by verifying the default config is optimized
 		config := DefaultIndexerConfig()
 
-		// Verify batch sizes are appropriately large for throughput
-		expectedMinBatch := 15000
-		if config.BatchSize < expectedMinBatch {
-			t.Errorf("Expected batch size >= %d, got %d", expectedMinBatch, config.BatchSize)
-		}
-
 		// IndexDocuments is synchronous, so the queue only needs a small
 		// multiple of the worker count. Large queues retain entire batches.
 		expectedMaxQueue := config.WorkerCount * 4
@@ -36,7 +29,7 @@ func TestParserBatchSizeOptimization(t *testing.T) {
 			t.Errorf("Expected queue size <= %d, got %d", expectedMaxQueue, config.MaxQueueSize)
 		}
 
-		t.Logf("✅ Parser configuration optimized: BatchSize=%d, QueueSize=%d",
+		t.Logf("Parser configuration: BatchSize=%d, QueueSize=%d",
 			config.BatchSize, config.MaxQueueSize)
 	})
 }
