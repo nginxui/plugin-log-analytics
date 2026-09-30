@@ -29,7 +29,10 @@
       "windows-amd64": "server/dist/log-analytics-windows-amd64.exe",
       "windows-arm64": "server/dist/log-analytics-windows-arm64.exe"
     },
-    "lifecycle": "resident"
+    "lifecycle": "resident",
+    "resources": {
+      "recommended_memory_mb": 512
+    }
   },
   "webapp": {
     "bundle_path": "webapp/dist/main.js",

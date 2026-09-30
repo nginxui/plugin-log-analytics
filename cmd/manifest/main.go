@@ -32,6 +32,8 @@ const (
 	PluginVersion     = "1.0.0"
 	PluginDescription = "Search nginx access logs with structured queries and see traffic on a dashboard with a visitor map."
 	MinNginxUIVersion = "2.7.0"
+	// RecommendedMemoryMB is the machine memory advised for the plugin.
+	RecommendedMemoryMB = 512
 )
 
 // Package relative paths of the browser bundle. The entry and the styles are
@@ -114,6 +116,9 @@ func Build() (*protocol.Manifest, error) {
 			Executables: executables,
 			// The plugin indexes on a schedule, so it stays up.
 			Lifecycle: protocol.LifecycleResident,
+			// Indexing a large log with nginx-ui on the same machine
+			// needs about this much.
+			Resources: &protocol.ManifestResources{RecommendedMemoryMB: RecommendedMemoryMB},
 		},
 		IconPath: IconPath,
 		Webapp: &protocol.ManifestWebapp{
