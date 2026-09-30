@@ -47,3 +47,10 @@ All notable changes to this plugin are documented here. The format follows
 - Unpacking the IP location database writes to a temporary file first, so an
   indexing round that still uses the previous database keeps working, and it
   never overwrites a custom database.
+- Every log line is indexed once, also when the log is rotated. The document id
+  follows the content of the file (its first line and the offset of the line),
+  not its path, so a file that was renamed, copied by copytruncate or compressed
+  is recognized and continues from where the earlier copy ended. Rotated and
+  compressed files are read by the incremental round too, a line that is still
+  being written waits for its end, and the files of an existing index are read
+  once more to replace documents that had the old ids.

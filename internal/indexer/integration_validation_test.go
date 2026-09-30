@@ -16,7 +16,7 @@ func TestIntegrationValidation(t *testing.T) {
 	// Create test log content
 	testLogContent := `127.0.0.1 - - [25/Dec/2023:10:00:00 +0000] "GET /api/test HTTP/1.1" 200 1234 "-" "test-agent"
 127.0.0.2 - - [25/Dec/2023:10:01:00 +0000] "POST /api/data HTTP/1.1" 201 5678 "http://example.com" "another-agent"
-127.0.0.3 - - [25/Dec/2023:10:02:00 +0000] "PUT /api/update HTTP/1.1" 204 0 "-" "update-agent"`
+127.0.0.3 - - [25/Dec/2023:10:02:00 +0000] "PUT /api/update HTTP/1.1" 204 0 "-" "update-agent"` + "\n"
 
 	// Create temporary test file
 	tmpFile, err := os.CreateTemp("", "test_nginx_*.log")
@@ -141,7 +141,8 @@ func TestOptimizationCompatibility(t *testing.T) {
 	t.Log("=== Testing Optimization Backward Compatibility ===")
 
 	// Create test log content
-	testLogContent := `127.0.0.1 - - [25/Dec/2023:10:00:00 +0000] "GET /test HTTP/1.1" 200 1234`
+	// A line counts once it is terminated: the end of an unterminated last line may still be written.
+	testLogContent := `127.0.0.1 - - [25/Dec/2023:10:00:00 +0000] "GET /test HTTP/1.1" 200 1234` + "\n"
 
 	tmpFile, err := os.CreateTemp("", "compat_test_*.log")
 	if err != nil {

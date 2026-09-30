@@ -380,9 +380,10 @@ func (ts *TaskScheduler) executeIndexTask(ctx context.Context, logPath string, p
 		return
 	}
 
-	// Execute the indexing with progress tracking
+	// Execute the indexing with progress tracking. A group that was indexed
+	// before continues from its stored state.
 	startTime := time.Now()
-	docsCountMap, minTime, maxTime, err := ts.modernIndexer.IndexLogGroupWithProgress(logPath, progressConfig)
+	group, err := ts.modernIndexer.SyncLogGroup(logPath, progressConfig)
 
 	if err != nil {
 		logger.Errorf("Failed to execute indexing task %s: %v", logPath, err)
@@ -393,15 +394,13 @@ func (ts *TaskScheduler) executeIndexTask(ctx context.Context, logPath string, p
 		return
 	}
 
-	// Calculate total documents indexed
-	var totalDocsIndexed uint64
-	for _, docCount := range docsCountMap {
-		totalDocsIndexed += docCount
-	}
-
 	// Save indexing metadata using the log file manager
-	duration := time.Since(startTime)
-	if err := ts.logFileManager.SaveIndexMetadata(logPath, totalDocsIndexed, startTime, duration, minTime, maxTime); err != nil {
+	var totalDocsIndexed uint64
+	if group == nil {
+		group = &indexer.GroupSyncResult{}
+	}
+	totalDocsIndexed, err = saveGroupMetadata(ts.logFileManager, logPath, group, startTime, time.Since(startTime))
+	if err != nil {
 		logger.Errorf("Failed to save index metadata for %s: %v", logPath, err)
 	}
 

@@ -383,3 +383,37 @@ func BenchmarkStreamBufferSizes(b *testing.B) {
 		})
 	}
 }
+
+func TestParseLinesOrderedKeepsTheOrderOfTheInput(t *testing.T) {
+	config := DefaultParserConfig()
+	config.MaxLineLength = 16 * 1024
+	config.BatchSize = 50
+	config.WorkerCount = 4
+	p := NewParser(config, NewCachedUserAgentParser(NewSimpleUserAgentParser(), 100), &mockGeoIPService{})
+
+	lines := make([]string, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		if i%100 == 7 {
+			// Longer than the limit: no entry for this slot.
+			lines = append(lines, strings.Repeat("x", config.MaxLineLength+1))
+			continue
+		}
+		lines = append(lines, fmt.Sprintf(`10.0.0.1 - - [25/Dec/2023:10:00:00 +0000] "GET /n/%d HTTP/1.1" 200 1 "-" "ua"`, i))
+	}
+
+	entries := p.ParseLinesOrdered(context.Background(), lines)
+	if len(entries) != len(lines) {
+		t.Fatalf("got %d slots for %d lines", len(entries), len(lines))
+	}
+	for i, entry := range entries {
+		if i%100 == 7 {
+			if entry != nil {
+				t.Fatalf("slot %d should be empty", i)
+			}
+			continue
+		}
+		if entry == nil || entry.Raw != lines[i] {
+			t.Fatalf("slot %d does not hold its own line", i)
+		}
+	}
+}

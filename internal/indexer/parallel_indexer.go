@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 	"github.com/blevesearch/bleve/v2"
 
 	"github.com/nginxui/plugin-log-analytics/internal/logger"
-	"github.com/nginxui/plugin-log-analytics/internal/utils"
 )
 
 // ParallelIndexer provides high-performance parallel indexing with sharding
@@ -766,10 +764,38 @@ func (pi *ParallelIndexer) updateMetrics() {
 	pi.stats.IndexingRate = metrics.IndexingRate
 }
 
-// IndexLogGroupWithProgress indexes a log group with progress tracking
+// IndexLogGroupWithProgress indexes every file of a log group from its start,
+// whatever the stored state says. It is what a rebuild uses. The documents of
+// a file carry ids that depend on its content, so reading a file again
+// replaces its documents and adds none. The map holds the documents written
+// per file.
 func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressConfig *ProgressConfig) (map[string]uint64, *time.Time, *time.Time, error) {
+	result, err := pi.indexLogGroup(basePath, progressConfig, true)
+	if err != nil || result == nil {
+		return nil, nil, nil, err
+	}
+
+	docsCountMap := make(map[string]uint64, len(result.Files))
+	for path, file := range result.Files {
+		docsCountMap[path] = file.Docs
+	}
+	return docsCountMap, result.MinTime, result.MaxTime, nil
+}
+
+// SyncLogGroup indexes what is new in a log group: the lines that follow the
+// stored position of each file, and the files that have no state yet. A file
+// that did not change is left alone. A rotated or compressed copy of a file
+// that was indexed before continues from where that file ended. It returns nil
+// when the group has no file.
+func (pi *ParallelIndexer) SyncLogGroup(basePath string, progressConfig *ProgressConfig) (*GroupSyncResult, error) {
+	return pi.indexLogGroup(basePath, progressConfig, false)
+}
+
+// indexLogGroup reads the files of a group. With force every file is read from
+// its start, otherwise only the files that changed, from their stored state.
+func (pi *ParallelIndexer) indexLogGroup(basePath string, progressConfig *ProgressConfig, force bool) (*GroupSyncResult, error) {
 	if !pi.IsHealthy() {
-		return nil, nil, nil, fmt.Errorf("indexer not healthy")
+		return nil, fmt.Errorf("indexer not healthy")
 	}
 
 	// Create progress tracker if config is provided
@@ -778,41 +804,12 @@ func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressCo
 		progressTracker = NewProgressTracker(basePath, progressConfig)
 	}
 
-	// Find all files belonging to this log group by globbing
-	globPath := basePath + "*"
-	matches, err := filepath.Glob(globPath)
+	uniqueFiles, err := GroupFiles(basePath)
 	if err != nil {
 		if progressTracker != nil {
 			progressTracker.Cancel(fmt.Sprintf("glob failed: %v", err))
 		}
-		return nil, nil, nil, fmt.Errorf("failed to glob for log files with base %s: %w", basePath, err)
-	}
-
-	// filepath.Glob might not match the base file itself if it has no extension,
-	// so we check for it explicitly and add it to the list.
-	// Validate log path before accessing it
-	if utils.IsValidLogPath(basePath) {
-		info, err := os.Stat(basePath)
-		if err == nil && info.Mode().IsRegular() {
-			matches = append(matches, basePath)
-		}
-	}
-
-	// Deduplicate file list
-	seen := make(map[string]struct{})
-	uniqueFiles := make([]string, 0)
-	for _, match := range matches {
-		if _, ok := seen[match]; !ok {
-			// Further check if it's a file, not a directory. Glob can match dirs.
-			// Validate log path before accessing it
-			if utils.IsValidLogPath(match) {
-				info, err := os.Stat(match)
-				if err == nil && info.Mode().IsRegular() {
-					seen[match] = struct{}{}
-					uniqueFiles = append(uniqueFiles, match)
-				}
-			}
-		}
+		return nil, fmt.Errorf("failed to glob for log files with base %s: %w", basePath, err)
 	}
 
 	if len(uniqueFiles) == 0 {
@@ -820,10 +817,14 @@ func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressCo
 		if progressTracker != nil {
 			progressTracker.Cancel("no files found")
 		}
-		return nil, nil, nil, nil
+		return nil, nil
 	}
 
 	logger.Infof("Found %d file(s) for log group %s: %v", len(uniqueFiles), basePath, uniqueFiles)
+
+	// The state of the group before the round, so a file that was renamed finds
+	// the row of its old path.
+	snapshot := loadGroupSnapshot(basePath)
 
 	// Set up progress tracking for all files
 	if progressTracker != nil {
@@ -831,20 +832,17 @@ func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressCo
 			isCompressed := IsCompressedFile(filePath)
 			progressTracker.AddFile(filePath, isCompressed)
 
-			// Get file size for progress calculation. The line estimate is set
-			// by IndexSingleFileWithProgress (size/150), which previously
-			// overwrote the sampling-based estimate anyway — so the 1MB
-			// sampling read per file was pure wasted I/O and is skipped here.
+			// The line estimate is set per file from its size (size/150): the
+			// 1MB sampling read per file it replaced was pure wasted I/O.
 			if stat, err := os.Stat(filePath); err == nil {
 				progressTracker.SetFileSize(filePath, stat.Size())
+				progressTracker.SetFileEstimate(filePath, max(stat.Size()/150, 100))
 			}
 		}
 	}
 
-	docsCountMap := make(map[string]uint64)
-	var docsCountMu sync.RWMutex
-	var overallMinTime, overallMaxTime *time.Time
-	var timeMu sync.Mutex
+	group := &GroupSyncResult{Files: make(map[string]*FileSyncResult)}
+	var groupMu sync.Mutex
 
 	// Process files in parallel with controlled concurrency
 	var fileWg sync.WaitGroup
@@ -869,11 +867,21 @@ func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressCo
 			fileSemaphore <- struct{}{}
 			defer func() { <-fileSemaphore }()
 
+			if !force {
+				if info, err := os.Stat(fp); err == nil && !NeedsSync(info, snapshot.byPath[fp]) {
+					if progressTracker != nil {
+						progressTracker.StartFile(fp)
+						progressTracker.CompleteFile(fp, 0)
+					}
+					return
+				}
+			}
+
 			if progressTracker != nil {
 				progressTracker.StartFile(fp)
 			}
 
-			docsIndexed, minTime, maxTime, err := pi.indexSingleFileWithProgress(fp, progressTracker)
+			file, err := pi.syncTrackedFile(fp, basePath, snapshot, force, progressTracker)
 			if err != nil {
 				logger.Warnf("Failed to index file '%s' in group '%s', skipping: %v", fp, basePath, err)
 				if progressTracker != nil {
@@ -882,42 +890,114 @@ func (pi *ParallelIndexer) IndexLogGroupWithProgress(basePath string, progressCo
 				return // Skip this file
 			}
 
-			// Thread-safe update of docsCountMap
-			docsCountMu.Lock()
-			docsCountMap[fp] = docsIndexed
-			docsCountMu.Unlock()
-
 			if progressTracker != nil {
-				progressTracker.CompleteFile(fp, int64(docsIndexed))
+				progressTracker.CompleteFile(fp, int64(file.Docs))
 			}
 
-			// Thread-safe update of time ranges
-			timeMu.Lock()
-			if minTime != nil {
-				if overallMinTime == nil || minTime.Before(*overallMinTime) {
-					overallMinTime = minTime
-				}
+			groupMu.Lock()
+			defer groupMu.Unlock()
+			group.Files[fp] = file
+			if file.MinTime != nil && (group.MinTime == nil || file.MinTime.Before(*group.MinTime)) {
+				group.MinTime = file.MinTime
 			}
-			if maxTime != nil {
-				if overallMaxTime == nil || maxTime.After(*overallMaxTime) {
-					overallMaxTime = maxTime
-				}
+			if file.MaxTime != nil && (group.MaxTime == nil || file.MaxTime.After(*group.MaxTime)) {
+				group.MaxTime = file.MaxTime
 			}
-			timeMu.Unlock()
 		}(filePath)
 	}
 
 	// Wait for all files to complete
 	fileWg.Wait()
 
-	return docsCountMap, overallMinTime, overallMaxTime, nil
+	return group, nil
 }
 
-// indexSingleFileWithProgress indexes a single file with progress updates
-// Now uses the optimized implementation with full progress tracking integration
-func (pi *ParallelIndexer) indexSingleFileWithProgress(filePath string, progressTracker *ProgressTracker) (uint64, *time.Time, *time.Time, error) {
-	// Delegate to optimized implementation with progress tracking
-	return pi.IndexSingleFileWithProgress(filePath, progressTracker)
+// syncTrackedFile reads one file and stores its state. A state that cannot be
+// stored is not an error of the read: the file is read again in the next round
+// and its documents are replaced.
+func (pi *ParallelIndexer) syncTrackedFile(filePath, mainLogPath string, snapshot *groupSnapshot, force bool, progressTracker *ProgressTracker) (*FileSyncResult, error) {
+	opts := syncOptions{force: force}
+	if progressTracker != nil {
+		opts.onBatch = func(lines, offset int64) {
+			if IsCompressedFile(filePath) {
+				progressTracker.UpdateFileProgress(filePath, lines)
+				return
+			}
+			progressTracker.UpdateFileProgress(filePath, lines, offset)
+		}
+	}
+
+	file, err := pi.syncFile(context.Background(), filePath, getMainLogPathFromFile(filePath), snapshot, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := saveFileState(filePath, getMainLogPathFromFile(filePath), file); err != nil {
+		logger.Warnf("Could not store the index state of %s: %v", filePath, err)
+	}
+	return file, nil
+}
+
+// purgeDocsOfFile deletes the documents that carry the path of a file. With
+// legacyOnly it does so only when the file has documents with ids from before
+// content tracking, which a read of the file would not replace. Documents with
+// current ids are left, because reading the file overwrites them.
+func (pi *ParallelIndexer) purgeDocsOfFile(filePath string, legacyOnly bool) error {
+	query := bleve.NewTermQuery(filePath)
+	query.SetField("file_path")
+
+	var deleteErrors []error
+	for _, shard := range pi.shardManager.GetAllShards() {
+		if shard == nil {
+			continue
+		}
+
+		request := bleve.NewSearchRequest(query)
+		request.Size = 1000
+		request.Fields = []string{"file_path"}
+
+		first := true
+		for {
+			result, err := shard.Search(request)
+			if err != nil {
+				deleteErrors = append(deleteErrors, fmt.Errorf("failed to search for documents of %s: %w", filePath, err))
+				break
+			}
+			if len(result.Hits) == 0 {
+				break
+			}
+
+			if first && legacyOnly {
+				legacy := false
+				for _, hit := range result.Hits {
+					if !isTrackedDocID(hit.ID) {
+						legacy = true
+						break
+					}
+				}
+				if !legacy {
+					break
+				}
+			}
+			first = false
+
+			batch := shard.NewBatch()
+			for _, hit := range result.Hits {
+				batch.Delete(hit.ID)
+			}
+			if err := shard.Batch(batch); err != nil {
+				deleteErrors = append(deleteErrors, fmt.Errorf("failed to delete documents of %s: %w", filePath, err))
+				break
+			}
+			if len(result.Hits) < request.Size {
+				break
+			}
+		}
+	}
+
+	if len(deleteErrors) > 0 {
+		return fmt.Errorf("encountered %d errors while removing the documents of %s: %v", len(deleteErrors), filePath, deleteErrors[0])
+	}
+	return nil
 }
 
 // CountDocsByMainLogPath returns the exact number of documents indexed for a given log group (main log path)

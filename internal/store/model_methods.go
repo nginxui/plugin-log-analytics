@@ -79,6 +79,8 @@ func (nli *NginxLogIndex) Reset() {
 	nli.LastModified = time.Time{} // Clear last modified time
 	nli.LastSize = 0               // Clear index size
 	nli.LastPosition = 0
+	nli.Fingerprint = ""
+	nli.SyncVersion = 0
 	nli.LastIndexed = time.Time{} // Clear last indexed time
 	nli.IndexStartTime = nil      // Clear index start time
 	nli.IndexDuration = nil       // Clear index duration

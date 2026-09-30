@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"sync"
 	"time"
+
+	"github.com/nginxui/plugin-log-analytics/internal/cgroup"
 )
 
 // StreamParseBatches reads the stream line by line and parses it in batches
@@ -115,4 +118,52 @@ func (p *Parser) ChunkedParseStream(ctx context.Context, reader io.Reader, _ int
 // compatibility. Use StreamParseBatches for genuinely bounded-memory parsing.
 func (p *Parser) MemoryEfficientParseStream(ctx context.Context, reader io.Reader) (*ParseResult, error) {
 	return p.StreamParse(ctx, reader)
+}
+
+// ParseLinesOrdered parses the lines and returns one slot per line, in the
+// order of the input. A slot is nil when its line could not be parsed, so a
+// caller can map every entry back to the line, and to the file offset, it came
+// from. Large inputs are parsed by several workers over contiguous ranges.
+func (p *Parser) ParseLinesOrdered(ctx context.Context, lines []string) []*AccessLogEntry {
+	entries := make([]*AccessLogEntry, len(lines))
+	if len(lines) == 0 {
+		return entries
+	}
+
+	workers := p.config.WorkerCount
+	if workers <= 0 {
+		workers = cgroup.AvailableCPUs()
+	}
+	if len(lines) < p.config.BatchSize || workers <= 1 {
+		p.parseRange(ctx, lines, entries)
+		return entries
+	}
+	if workers > len(lines)/10+1 {
+		workers = len(lines)/10 + 1
+	}
+
+	chunk := (len(lines) + workers - 1) / workers
+	var wg sync.WaitGroup
+	for start := 0; start < len(lines); start += chunk {
+		end := min(start+chunk, len(lines))
+		wg.Add(1)
+		go func(lo, hi int) {
+			defer wg.Done()
+			p.parseRange(ctx, lines[lo:hi], entries[lo:hi])
+		}(start, end)
+	}
+	wg.Wait()
+	return entries
+}
+
+// parseRange parses lines into out, which has the same length.
+func (p *Parser) parseRange(ctx context.Context, lines []string, out []*AccessLogEntry) {
+	for i, line := range lines {
+		if i%256 == 0 && ctx.Err() != nil {
+			return
+		}
+		if entry, err := p.ParseLine(line); err == nil {
+			out[i] = entry
+		}
+	}
 }

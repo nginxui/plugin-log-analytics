@@ -441,9 +441,11 @@ func (lm *LogFileManager) SaveIndexMetadata(basePath string, documentCount uint6
 		return fmt.Errorf("could not get or create log index for '%s': %w", basePath, err)
 	}
 
-	// Get file stats to update LastModified and LastSize
+	// Get file stats to update LastModified and LastSize. A row with content
+	// tracking keeps the size and time of the read that indexed the file: the
+	// file may have grown since, and those lines are not indexed yet.
 	// Validate log path before accessing it
-	if utils.IsValidLogPath(basePath) {
+	if logIndex.SyncVersion == 0 && utils.IsValidLogPath(basePath) {
 		if fileInfo, err := os.Stat(basePath); err == nil {
 			logIndex.LastModified = fileInfo.ModTime()
 			logIndex.LastSize = fileInfo.Size()

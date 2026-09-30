@@ -1,10 +1,16 @@
 package service
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/nginxui/plugin-log-analytics/internal/indexer"
 	"github.com/nginxui/plugin-log-analytics/internal/store"
@@ -19,142 +25,106 @@ func listLog(t *testing.T, path string) {
 	t.Cleanup(func() { utils.SetHostLogs(nil) })
 }
 
-// Test that grouped (aggregated) log metadata with oversized LastSize values
-// does not incorrectly trigger rotation detection in the fallback path.
-func TestNeedsIncrementalIndexingAggregatedSizeRespectsClamp(t *testing.T) {
-	t.Parallel()
+// groupRows is a stored state for a group, keyed by path.
+type groupRows []*store.NginxLogIndex
 
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "access.log")
-	listLog(t, logPath)
+func (g groupRows) GetLogIndexesByGroup(string) ([]*store.NginxLogIndex, error) { return g, nil }
 
-	if err := os.WriteFile(logPath, []byte("nginx-ui"), 0o644); err != nil {
-		t.Fatalf("failed to create temp log file: %v", err)
+// trackedRow is the stored state of a file that was read up to its end.
+func trackedRow(path string, info os.FileInfo) *store.NginxLogIndex {
+	return &store.NginxLogIndex{
+		Path:         path,
+		MainLogPath:  path,
+		LastModified: info.ModTime(),
+		LastSize:     info.Size(),
+		LastIndexed:  time.Now(),
+		Fingerprint:  "0123456789abcdef0123456789abcdef",
+		SyncVersion:  1,
 	}
-
-	info, err := os.Stat(logPath)
-	if err != nil {
-		t.Fatalf("failed to stat temp log file: %v", err)
-	}
-
-	// Simulate aggregated metadata where LastSize is larger than the live file.
-	logEntry := &NginxLogWithIndex{
-		Path:         logPath,
-		Type:         "access",
-		LastModified: info.ModTime().Unix(),
-		LastIndexed:  time.Now().Unix(),
-		LastSize:     info.Size() * 5,
-	}
-
-	if needsIncrementalIndexing(logEntry, nil) {
-		t.Fatalf("aggregated size should not trigger re-indexing when clamped")
-	}
-}
-
-type stubLogIndexProvider struct {
-	idx *store.NginxLogIndex
-	err error
-}
-
-func (s stubLogIndexProvider) GetLogIndex(path string) (*store.NginxLogIndex, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	if s.idx != nil {
-		s.idx.Path = path
-	}
-	return s.idx, nil
 }
 
 func TestNeedsIncrementalIndexingSkipsWhenUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "access.log")
 	listLog(t, logPath)
-	if err := os.WriteFile(logPath, []byte("initial\n"), 0o644); err != nil {
-		t.Fatalf("write temp log: %v", err)
-	}
-
+	require.NoError(t, os.WriteFile(logPath, []byte("initial\n"), 0o644))
 	info, err := os.Stat(logPath)
-	if err != nil {
-		t.Fatalf("stat temp log: %v", err)
-	}
+	require.NoError(t, err)
 
-	persisted := &store.NginxLogIndex{
-		Path:         logPath,
-		LastModified: info.ModTime(),
-		LastSize:     info.Size(),
-		LastIndexed:  time.Now(),
-	}
-
-	logData := &NginxLogWithIndex{
-		Path:         logPath,
-		Type:         "access",
-		IndexStatus:  string(indexer.IndexStatusIndexed),
-		LastModified: info.ModTime().Unix(),
-		LastSize:     info.Size() * 10, // simulate grouped size inflation
-		LastIndexed:  time.Now().Unix(),
-	}
-
-	if needsIncrementalIndexing(logData, stubLogIndexProvider{idx: persisted}) {
-		t.Fatalf("expected no incremental indexing when file metadata is unchanged")
-	}
+	logData := &NginxLogWithIndex{Path: logPath, Type: "access", IndexStatus: string(indexer.IndexStatusIndexed)}
+	assert.False(t, needsIncrementalIndexing(logData, groupRows{trackedRow(logPath, info)}),
+		"expected no incremental indexing when file metadata is unchanged")
 }
 
 func TestNeedsIncrementalIndexingDetectsGrowth(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "access.log")
 	listLog(t, logPath)
-	if err := os.WriteFile(logPath, []byte("initial\n"), 0o644); err != nil {
-		t.Fatalf("write temp log: %v", err)
-	}
-
-	initialInfo, err := os.Stat(logPath)
-	if err != nil {
-		t.Fatalf("stat temp log: %v", err)
-	}
-
-	persisted := &store.NginxLogIndex{
-		Path:         logPath,
-		LastModified: initialInfo.ModTime().Add(-time.Minute),
-		LastSize:     initialInfo.Size(),
-		LastIndexed:  time.Now().Add(-time.Minute),
-	}
+	require.NoError(t, os.WriteFile(logPath, []byte("initial\n"), 0o644))
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+	rows := groupRows{trackedRow(logPath, info)}
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("open temp log: %v", err)
-	}
-	if _, err := f.WriteString("more data\n"); err != nil {
-		f.Close()
-		t.Fatalf("append temp log: %v", err)
-	}
-	_ = f.Close()
+	require.NoError(t, err)
+	_, err = f.WriteString("more data\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 
-	finalInfo, err := os.Stat(logPath)
-	if err != nil {
-		t.Fatalf("restat temp log: %v", err)
-	}
+	logData := &NginxLogWithIndex{Path: logPath, Type: "access", IndexStatus: string(indexer.IndexStatusIndexed)}
+	assert.True(t, needsIncrementalIndexing(logData, rows), "expected incremental indexing when file grew")
+}
 
-	logData := &NginxLogWithIndex{
-		Path:         logPath,
-		Type:         "access",
-		IndexStatus:  string(indexer.IndexStatusIndexed),
-		LastModified: finalInfo.ModTime().Unix(),
-		LastSize:     initialInfo.Size(),
-		LastIndexed:  time.Now().Unix(),
-	}
+func TestNeedsIncrementalIndexingDetectsAReplacedFile(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "access.log")
+	listLog(t, logPath)
+	require.NoError(t, os.WriteFile(logPath, []byte("a long first file with many lines\n"), 0o644))
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+	rows := groupRows{trackedRow(logPath, info)}
 
-	if !needsIncrementalIndexing(logData, stubLogIndexProvider{idx: persisted}) {
-		t.Fatalf("expected incremental indexing when file grew")
-	}
+	// Rotation: a new file at the same path, smaller than the one before.
+	require.NoError(t, os.Remove(logPath))
+	require.NoError(t, os.WriteFile(logPath, []byte("new\n"), 0o644))
+
+	logData := &NginxLogWithIndex{Path: logPath, Type: "access", IndexStatus: string(indexer.IndexStatusIndexed)}
+	assert.True(t, needsIncrementalIndexing(logData, rows))
+}
+
+func TestNeedsIncrementalIndexingSeesARotatedFileThatWasNeverRead(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "access.log")
+	listLog(t, logPath)
+	require.NoError(t, os.WriteFile(logPath, []byte("live\n"), 0o644))
+	require.NoError(t, os.WriteFile(logPath+".1", []byte("rotated\n"), 0o644))
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+
+	logData := &NginxLogWithIndex{Path: logPath, Type: "access", IndexStatus: string(indexer.IndexStatusIndexed)}
+	assert.True(t, needsIncrementalIndexing(logData, groupRows{trackedRow(logPath, info)}),
+		"the live file is unchanged, the rotated file has no state")
+}
+
+func TestNeedsIncrementalIndexingReadsFilesFromBeforeContentTracking(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "access.log")
+	listLog(t, logPath)
+	require.NoError(t, os.WriteFile(logPath, []byte("initial\n"), 0o644))
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+
+	row := trackedRow(logPath, info)
+	row.SyncVersion = 0
+	row.Fingerprint = ""
+	logData := &NginxLogWithIndex{Path: logPath, Type: "access", IndexStatus: string(indexer.IndexStatusIndexed)}
+	assert.True(t, needsIncrementalIndexing(logData, groupRows{row}))
 }
 
 func TestNeedsIncrementalIndexingIgnoresUnlistedFiles(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "access.log")
-	if err := os.WriteFile(logPath, []byte("initial\n"), 0o644); err != nil {
-		t.Fatalf("write temp log: %v", err)
-	}
+	require.NoError(t, os.WriteFile(logPath, []byte("initial\n"), 0o644))
 
 	// The file exists but the host does not list it.
 	utils.SetHostLogs(nil)
@@ -164,7 +134,57 @@ func TestNeedsIncrementalIndexingIgnoresUnlistedFiles(t *testing.T) {
 		Type:        "access",
 		IndexStatus: string(indexer.IndexStatusNotIndexed),
 	}
-	if needsIncrementalIndexing(logData, nil) {
-		t.Fatalf("a file the host does not list must never be read")
+	assert.False(t, needsIncrementalIndexing(logData, nil), "a file the host does not list must never be read")
+}
+
+// incrementalLines returns lines with ids that are unique across the test.
+func incrementalLines(first, count int) string {
+	var out strings.Builder
+	base := time.Date(2026, time.August, 12, 16, 0, 0, 0, time.UTC)
+	for i := first; i < first+count; i++ {
+		fmt.Fprintf(&out, `198.51.100.%d - - [%s] "GET /rot/%d HTTP/1.1" 200 %d "-" "rotation-test"`+"\n",
+			i%200+1, base.Add(time.Duration(i)*time.Second).Format("02/Jan/2006:15:04:05 -0700"), i, 100+i)
 	}
+	return out.String()
+}
+
+// TestIncrementalRoundsKeepEveryLineOnce runs the rounds of the scheduler over
+// a group that is indexed, appended to and rotated, and counts the documents
+// after each one.
+func TestIncrementalRoundsKeepEveryLineOnce(t *testing.T) {
+	env := startLifecycleEnv(t, 50)
+	logPath := env.logPaths[0]
+	logsDir := env.logsDir
+
+	appendText := func(name, text string) {
+		f, err := os.OpenFile(filepath.Join(logsDir, name), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		require.NoError(t, err)
+		_, err = f.WriteString(text)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+	}
+	round := func() uint64 {
+		performIncrementalIndexing()
+		release, err := AcquireQuery(context.Background())
+		require.NoError(t, err)
+		defer release()
+		return totalHits(t, logPath)
+	}
+
+	// The first round after the group was indexed reads nothing twice.
+	assert.Equal(t, uint64(50), round())
+
+	appendText("access.log", incrementalLines(1000, 10))
+	assert.Equal(t, uint64(60), round(), "append")
+
+	// Rotation with lines that arrived after the last round.
+	appendText("access.log", incrementalLines(2000, 5))
+	require.NoError(t, os.Rename(logPath, logPath+".1"))
+	appendText("access.log", incrementalLines(3000, 4))
+	assert.Equal(t, uint64(69), round(), "rename rotation")
+
+	assert.Equal(t, uint64(69), round(), "a round without changes")
+
+	appendText("access.log", incrementalLines(4000, 3))
+	assert.Equal(t, uint64(72), round(), "append after rotation")
 }

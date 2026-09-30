@@ -41,6 +41,13 @@ type NginxLogIndex struct {
 	Enabled        bool       `gorm:"default:true" json:"enabled"`               // Whether indexing is enabled for this file
 	HasTimeRange   bool       `gorm:"-" json:"has_timerange"`                    // Whether a time range is available (not persisted)
 
+	// Content tracking. LastPosition is an offset in the decompressed stream
+	// and Fingerprint identifies the content by its first line, so a file that
+	// was renamed, copied or compressed is recognized by what it holds and not
+	// by its path. A row with SyncVersion 0 was written before this tracking.
+	Fingerprint string `gorm:"size:64" json:"fingerprint"`    // Hash of the first line of the content
+	SyncVersion int    `gorm:"default:0" json:"sync_version"` // Version of the tracking that wrote this row
+
 	// Extended status fields
 	IndexStatus   string     `gorm:"default:'not_indexed';size:50" json:"index_status"` // Current index status
 	ErrorMessage  string     `gorm:"type:text" json:"error_message,omitempty"`          // Last error message
