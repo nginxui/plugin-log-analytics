@@ -136,6 +136,8 @@ func Build() (*protocol.Manifest, error) {
 			// Where the index is kept when it stays outside the data directory.
 			protocol.PermissionKV,
 		},
+		// The other implementation of the same pages and routes.
+		Conflicts:    []string{"com.nginxui.log-analytics-rs"},
 		Events:       []string{protocol.EventLogPathsChanged},
 		NetworkHosts: []string{"cloud.nginxui.com"},
 		// A socket keeps websockets and streaming responses possible.

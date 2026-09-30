@@ -57,6 +57,9 @@
     "network",
     "kv"
   ],
+  "conflicts": [
+    "com.nginxui.log-analytics-rs"
+  ],
   "events": [
     "log.paths_changed"
   ],
