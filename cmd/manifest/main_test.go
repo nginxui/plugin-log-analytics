@@ -107,14 +107,14 @@ func TestManifestShape(t *testing.T) {
 	if len(m.Events) != 1 || m.Events[0] != protocol.EventLogPathsChanged {
 		t.Fatalf("events = %v", m.Events)
 	}
-	if m.SettingsSchema == nil || len(m.SettingsSchema.Settings) != 4 {
+	if m.SettingsSchema == nil || len(m.SettingsSchema.Settings) != 3 {
 		t.Fatalf("settings schema = %+v", m.SettingsSchema)
 	}
 	keys := map[string]bool{}
 	for _, field := range m.SettingsSchema.Settings {
 		keys[field.Key] = true
 	}
-	for _, key := range []string{"incremental_index_interval", "max_concurrent_index_tasks", "index_custom_mmdb", "geo_map_path"} {
+	for _, key := range []string{"incremental_index_interval", "max_concurrent_index_tasks", "index_custom_mmdb"} {
 		if !keys[key] {
 			t.Fatalf("settings schema misses %s", key)
 		}

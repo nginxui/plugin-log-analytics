@@ -17,7 +17,7 @@ the visitors come from, on a map.
   the whole match and the traffic they carry.
 * **Traffic dashboard** for a log or a site: visitors and page views by hour and
   by day, the busiest pages, browsers, systems and devices, requests per second.
-* **Visitor map** for the world, for China and, in China, for each province.
+* **Visitor maps**: the world, the regions of each country and the busiest cities.
 * **Log list columns**: for every log the state of its index, when it was last
   indexed, how many entries it holds and which time range they cover, plus
   rebuilding a log or all of them.
@@ -51,7 +51,6 @@ the downloaded location database, so nothing is indexed twice.
 | `incremental_index_interval` | number | 15 | Minutes between two checks of the logs for new lines. Zero or empty means 15. |
 | `max_concurrent_index_tasks` | number | 0 | The most log files indexed at the same time. A lower number uses less memory. Zero derives it from the available CPUs, at most 2. |
 | `index_custom_mmdb` | text | empty | Path of your own IP location database. A relative path is looked up in the `geolite` folder of the plugin data directory. Empty uses the downloaded database. |
-| `geo_map_path` | text | empty | Folder with the map boundary files (`100000_full.json` and the province files). A relative path is looked up in the plugin data directory, empty means its `maps` folder. When a file is not there the page fetches it from a public map source. |
 
 The settings panel also downloads the IP location database and shows whether it
 is installed.
@@ -135,7 +134,6 @@ Everything the plugin writes is below `NGINX_UI_PLUGIN_DATA_DIR`:
 | `index/` | The search index, one folder per log group. |
 | `index.db` | The state of each file: position, size, entry count, time range, status. |
 | `geolite/` | The IP location database. |
-| `maps/` | Optional map boundary files, see `geo_map_path`. |
 | `http.sock` | The socket the HTTP route of NGINX UI connects to (on Windows a loopback port is used and no file is created). |
 | `import/` | Only while an older installation is being taken over. |
 
@@ -153,8 +151,7 @@ codes.
 | --- | --- | --- |
 | GET | `/logs/status` | Index state of every log group and the summary |
 | POST | `/search`, GET `/entries`, POST `/analytics`, GET `/preflight`, POST `/dashboard` | Search and statistics |
-| POST | `/geo/world`, `/geo/china`, `/geo/china/city`, `/geo/stats` | Map data |
-| GET | `/geo/boundary/:filename` | Map boundary file |
+| POST | `/geo/world`, `/geo/regions`, `/geo/points`, `/geo/stats` | Map data |
 | POST | `/index/rebuild` | Rebuild one log group (`{"path": "..."}`) or all |
 | POST | `/warm` | Open the shards in the background |
 | GET | `/geolite/status`, websocket `/geolite/download` | IP location database |

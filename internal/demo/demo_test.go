@@ -83,8 +83,8 @@ func TestGeoFabricatesOnlyForDocumentationAddresses(t *testing.T) {
 func TestGeoMirrorsChineseRegionCollapsing(t *testing.T) {
 	svc := &geoService{}
 
-	// The real service collapses CN/HK/MO/TW into "CN" and the China map keys
-	// off that, so any fabricated domestic location must do the same.
+	// The real service collapses CN/HK/MO/TW into "CN", so any fabricated
+	// domestic location must do the same and name its region for the map.
 	for _, ip := range documentationSample(t, 200) {
 		got, err := svc.Search(ip)
 		require.NoError(t, err)
@@ -94,6 +94,8 @@ func TestGeoMirrorsChineseRegionCollapsing(t *testing.T) {
 			assert.Equal(t, "CN", got.RegionCode,
 				"a fabricated province must always carry region code CN")
 			assert.Contains(t, cnProvinces, got.Province)
+			assert.Equal(t, cnProvinceCodes[got.Province], got.Sub1)
+			assert.NotEmpty(t, got.Sub1)
 		}
 	}
 }

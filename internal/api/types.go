@@ -29,11 +29,6 @@ type AnalyticsResponse struct {
 	Count   int                      `json:"count"`
 }
 
-// GeoDataResponse represents the response for geographic data
-type GeoDataResponse struct {
-	Data []GeoDataItem `json:"data"`
-}
-
 // GeoRegionResponse represents the response for geographic region data
 type GeoRegionResponse struct {
 	Data []GeoRegionItem `json:"data"`

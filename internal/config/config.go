@@ -17,16 +17,11 @@ const (
 	KeyIncrementalIndexInterval = "incremental_index_interval"
 	KeyMaxConcurrentIndexTasks  = "max_concurrent_index_tasks"
 	KeyIndexCustomMMDB          = "index_custom_mmdb"
-	KeyGeoMapPath               = "geo_map_path"
 )
 
 // DefaultIncrementalIndexInterval is used when the setting is missing or not
 // positive.
 const DefaultIncrementalIndexInterval = 15 * time.Minute
-
-// DefaultGeoMapDir is the directory of map boundary files below the data
-// directory when geo_map_path is empty.
-const DefaultGeoMapDir = "maps"
 
 // Settings are the plugin settings.
 type Settings struct {
@@ -39,9 +34,6 @@ type Settings struct {
 	// IndexCustomMMDB names a custom GeoIP database. A relative path is
 	// resolved against the geolite directory.
 	IndexCustomMMDB string
-	// GeoMapPath points to the directory of map boundary files. A relative
-	// path is resolved against the data directory.
-	GeoMapPath string
 }
 
 // IncrementalInterval returns the effective incremental indexing interval.
@@ -59,7 +51,6 @@ func ParseSettings(raw map[string]any) Settings {
 		IncrementalIndexInterval: intValue(raw[KeyIncrementalIndexInterval]),
 		MaxConcurrentIndexTasks:  intValue(raw[KeyMaxConcurrentIndexTasks]),
 		IndexCustomMMDB:          strings.TrimSpace(stringValue(raw[KeyIndexCustomMMDB])),
-		GeoMapPath:               strings.TrimSpace(stringValue(raw[KeyGeoMapPath])),
 	}
 }
 
@@ -135,21 +126,6 @@ func GeoLiteDir() string {
 	mu.RLock()
 	defer mu.RUnlock()
 	return filepath.Join(dataDir, "geolite")
-}
-
-// GeoMapDir returns the directory of the map boundary files.
-func GeoMapDir() string {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	base := settings.GeoMapPath
-	if base == "" {
-		base = DefaultGeoMapDir
-	}
-	if filepath.IsAbs(base) {
-		return filepath.Clean(base)
-	}
-	return filepath.Clean(filepath.Join(dataDir, base))
 }
 
 // Get returns the current settings.

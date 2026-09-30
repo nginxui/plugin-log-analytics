@@ -13,7 +13,6 @@ func TestParseSettings(t *testing.T) {
 		KeyIncrementalIndexInterval: float64(30),
 		KeyMaxConcurrentIndexTasks:  "3",
 		KeyIndexCustomMMDB:          "  custom.mmdb ",
-		KeyGeoMapPath:               "/srv/maps",
 		"unknown":                   true,
 	})
 
@@ -21,7 +20,6 @@ func TestParseSettings(t *testing.T) {
 		IncrementalIndexInterval: 30,
 		MaxConcurrentIndexTasks:  3,
 		IndexCustomMMDB:          "custom.mmdb",
-		GeoMapPath:               "/srv/maps",
 	}, got)
 	assert.Equal(t, 30*time.Minute, got.IncrementalInterval())
 }
@@ -38,15 +36,9 @@ func TestPaths(t *testing.T) {
 	SetDataDir("/data")
 	assert.Equal(t, filepath.Join("/data", "index"), IndexPath())
 	assert.Equal(t, filepath.Join("/data", "geolite"), GeoLiteDir())
-	assert.Equal(t, filepath.Join("/data", "maps"), GeoMapDir())
 
 	SetIndexPath("/legacy/log-index")
 	assert.Equal(t, "/legacy/log-index", IndexPath())
-
-	Set(Settings{GeoMapPath: "boundaries"})
-	assert.Equal(t, filepath.Join("/data", "boundaries"), GeoMapDir())
-	Set(Settings{GeoMapPath: "/abs/maps"})
-	assert.Equal(t, "/abs/maps", GeoMapDir())
 }
 
 func TestSubscribersSeeChangesOnly(t *testing.T) {

@@ -197,7 +197,7 @@ func TestService_GetGeoDistributionByCountry_CountriesFilterValidation(t *testin
 }
 
 func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
-	// This test verifies that ChinaMap total matches WorldMap CN count
+	// This test verifies that province total matches WorldMap CN count
 	mockSearcher := &MockSearcher{}
 	s := NewService(mockSearcher)
 
@@ -215,7 +215,7 @@ func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
 			"region_code": {
 				Total: 53,
 				Terms: []*searcher.FacetTerm{
-					{Term: "CN", Count: 4185}, // Key: CN count should match ChinaMap total
+					{Term: "CN", Count: 4185}, // Key: CN count should match province total
 					{Term: "FR", Count: 3056},
 					{Term: "US", Count: 1456},
 					{Term: "DE", Count: 1152},
@@ -225,7 +225,7 @@ func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
 		},
 	}
 
-	// Mock ChinaMap result with same total
+	// Mock province result with same total
 	chinaMapResult := &searcher.SearchResult{
 		TotalHits: 4185, // Should match CN count from WorldMap
 		Facets: map[string]*searcher.Facet{
@@ -250,7 +250,7 @@ func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
 			searchReq.FacetFields[0] == "region_code"
 	})).Return(worldMapResult, nil).Once()
 
-	// Second call: GetGeoDistributionByCountry (ChinaMap)
+	// Second call: GetGeoDistributionByCountry (provinces)
 	mockSearcher.On("Search", ctx, mock.MatchedBy(func(searchReq *searcher.SearchRequest) bool {
 		return len(searchReq.Countries) == 1 &&
 			searchReq.Countries[0] == "CN" &&
@@ -266,7 +266,7 @@ func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
 	cnCountInWorld := worldResult.Countries["CN"]
 	assert.Equal(t, 4185, cnCountInWorld)
 
-	// Test ChinaMap
+	// Test the provinces
 	chinaResult, err := s.GetGeoDistributionByCountry(ctx, req, "CN")
 	assert.NoError(t, err)
 	assert.NotNil(t, chinaResult)
@@ -277,9 +277,9 @@ func TestService_GeoDataConsistency_ChinaVsWorld(t *testing.T) {
 		totalChinaVisits += count
 	}
 
-	// Verify consistency: WorldMap CN count should equal ChinaMap total
+	// Verify consistency: WorldMap CN count should equal province total
 	assert.Equal(t, cnCountInWorld, totalChinaVisits,
-		"WorldMap CN count (%d) should equal ChinaMap total (%d)",
+		"WorldMap CN count (%d) should equal province total (%d)",
 		cnCountInWorld, totalChinaVisits)
 
 	mockSearcher.AssertExpectations(t)

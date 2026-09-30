@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nginxui/plugin-log-analytics/internal/apierr"
-	"github.com/nginxui/plugin-log-analytics/internal/config"
 	"github.com/nginxui/plugin-log-analytics/internal/hub"
 	"github.com/nginxui/plugin-log-analytics/internal/indexer"
 	"github.com/nginxui/plugin-log-analytics/internal/service"
@@ -169,8 +168,8 @@ func TestQueryRoutesAnswer(t *testing.T) {
 		{http.MethodPost, "/analytics", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now, "limit": 5}},
 		{http.MethodPost, "/dashboard", map[string]any{"log_path": env.logPath, "start_date": "2026-08-01", "end_date": "2026-08-31"}},
 		{http.MethodPost, "/geo/world", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now}},
-		{http.MethodPost, "/geo/china", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now}},
-		{http.MethodPost, "/geo/china/city", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now, "province": "北京"}},
+		{http.MethodPost, "/geo/regions", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now, "country": "US"}},
+		{http.MethodPost, "/geo/points", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now}},
 		{http.MethodPost, "/geo/stats", map[string]any{"path": env.logPath, "start_time": 1, "end_time": now}},
 	} {
 		recorder := env.do(t, tc.method, tc.path, tc.body)
@@ -285,29 +284,6 @@ func TestRebuildOfOneGroupIndexesItAgain(t *testing.T) {
 		}
 		return row.DocumentCount == 9 && row.IndexStatus == string(indexer.IndexStatusIndexed)
 	}, 20*time.Second, 100*time.Millisecond)
-}
-
-func TestGeoBoundaryFileIsServedFromTheMapDirectory(t *testing.T) {
-	env := startHTTPEnv(t, 1)
-
-	mapsDir := filepath.Join(env.dataDir, "maps")
-	require.NoError(t, os.MkdirAll(mapsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(mapsDir, "110000_full.json"), []byte(`{"type":"FeatureCollection"}`), 0o644))
-
-	recorder := env.do(t, http.MethodGet, "/geo/boundary/110000_full.json", nil)
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Contains(t, recorder.Header().Get("Content-Type"), "application/json")
-	assert.JSONEq(t, `{"type":"FeatureCollection"}`, recorder.Body.String())
-
-	assert.Equal(t, http.StatusNotFound, env.do(t, http.MethodGet, "/geo/boundary/120000_full.json", nil).Code)
-	assert.Equal(t, http.StatusNotFound, env.do(t, http.MethodGet, "/geo/boundary/..%2Fpasswd", nil).Code, "an encoded slash never reaches the handler")
-	assert.Equal(t, http.StatusBadRequest, env.do(t, http.MethodGet, "/geo/boundary/evil.json", nil).Code)
-
-	// A configured folder is used instead.
-	custom := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(custom, "330000_full.json"), []byte(`{}`), 0o644))
-	config.Set(config.Settings{GeoMapPath: custom})
-	assert.Equal(t, http.StatusOK, env.do(t, http.MethodGet, "/geo/boundary/330000_full.json", nil).Code)
 }
 
 func TestGeoLiteStatus(t *testing.T) {

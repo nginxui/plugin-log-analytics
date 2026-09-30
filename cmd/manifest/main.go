@@ -162,12 +162,6 @@ func Build() (*protocol.Manifest, error) {
 					DisplayName: "Custom IP location database",
 					HelpText:    "Path of your own IP location database file. Empty uses the downloaded one.",
 				},
-				{
-					Key:         "geo_map_path",
-					Type:        "text",
-					DisplayName: "Map files folder",
-					HelpText:    "Folder with the map outline files. Empty uses the plugin's own folder. Files not found there are loaded online.",
-				},
 			},
 		},
 	}, nil

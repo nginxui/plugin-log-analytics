@@ -60,18 +60,19 @@ func (g *geoService) Search(ip string) (*parser.GeoLocation, error) {
 
 	s := seed("geo", ip)
 
-	// Roughly two thirds of demo traffic is domestic, which is what makes the
-	// China map worth rendering at all.
+	// Roughly two thirds of demo traffic is domestic, which fills the region
+	// map of China.
 	if s%3 != 0 {
 		province := pick(cnProvinces, s)
 		city := pick(cnCities[province], s>>8)
-		// The real path collapses CN/HK/MO/TW into "CN" (geolite.go); the
-		// China map keys off that, so mirror it exactly.
+		// The real path collapses CN/HK/MO/TW into "CN" (geolite.go), so
+		// mirror it exactly.
 		return &parser.GeoLocation{
 			CountryCode: "CN",
 			RegionCode:  "CN",
 			Province:    province,
 			City:        city,
+			Sub1:        cnProvinceCodes[province],
 		}, nil
 	}
 

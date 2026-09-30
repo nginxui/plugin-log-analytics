@@ -4,12 +4,18 @@ package demo
 // the shape of the demo is a single reviewable diff.
 
 // cnProvince is the province vocabulary. These must be the simplified-Chinese
-// names the real GeoLite path produces (internal/geolite/geolite.go), because
-// the China map matches on them.
+// names the real GeoLite path produces (internal/geolite/geolite.go).
 var cnProvinces = []string{
 	"广东", "北京", "上海", "浙江", "江苏",
 	"四川", "湖北", "福建", "山东", "河南",
 	"陕西", "湖南", "重庆", "天津", "辽宁",
+}
+
+// cnProvinceCodes are the ISO 3166-2 codes the region map of China draws.
+var cnProvinceCodes = map[string]string{
+	"广东": "CN-GD", "北京": "CN-BJ", "上海": "CN-SH", "浙江": "CN-ZJ", "江苏": "CN-JS",
+	"四川": "CN-SC", "湖北": "CN-HB", "福建": "CN-FJ", "山东": "CN-SD", "河南": "CN-HA",
+	"陕西": "CN-SN", "湖南": "CN-HN", "重庆": "CN-CQ", "天津": "CN-TJ", "辽宁": "CN-LN",
 }
 
 // cnCities per province, index-aligned with cnProvinces.

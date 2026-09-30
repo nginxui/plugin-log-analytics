@@ -205,6 +205,11 @@ func (s *Service) Search(ipStr string) (*IPLocation, error) {
 				loc.City = cityZH
 			}
 
+			// Hong Kong, Macau and Taiwan are regions of the China map
+			if country != "CN" && IsChineseRegion(country) {
+				loc.Sub1 = "CN-" + country
+				loc.Sub2 = ""
+			}
 			loc.RegionCode = "CN"
 		}
 
