@@ -218,7 +218,7 @@ func encode(manifest *protocol.Manifest) ([]byte, error) {
 
 // FilterPlatform narrows a rendered manifest to one "<goos>-<goarch>"
 // executable. A per-platform package must declare exactly the platform it
-// ships, see the plugin spec PKG-12, while the catalog release keeps the full
+// ships, while the catalog release keeps the full
 // map in its manifest snapshot.
 func FilterPlatform(data []byte, platform string) ([]byte, error) {
 	var manifest protocol.Manifest
