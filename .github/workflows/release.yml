@@ -35,6 +35,18 @@ jobs:
           # git-cliff reads the commits since the previous tag.
           fetch-depth: 0
 
+      # The API shape test reads the webapp source of the release this plugin
+      # packages.
+      - name: Read webapp.lock
+        id: webapp
+        run: echo "version=$(sed -n 's/^version=//p' webapp.lock)" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v7
+        with:
+          repository: nginxui/plugin-log-analytics-webapp
+          ref: v${{ steps.webapp.outputs.version }}
+          path: plugin-log-analytics-webapp
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: plugin-log-analytics/go.mod
