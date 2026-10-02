@@ -311,3 +311,32 @@ func TestMemoryGoesBackOnceWhenTheLastRoundEnds(t *testing.T) {
 	second()
 	assert.Equal(t, before+1, env.freed.Load(), "ending a round twice changes nothing")
 }
+
+// A manual stop also cancels the context the shutdown monitor waits on. On a
+// busy machine the monitor wakes up after the services were started again and
+// must leave those running.
+func TestALateMonitorLeavesTheRestartedServicesRunning(t *testing.T) {
+	startLifecycleEnv(t, 5)
+
+	servicesMutex.RLock()
+	stopped := serviceContext
+	servicesMutex.RUnlock()
+	require.NotNil(t, stopped)
+
+	StopServices()
+	InitializeServices(context.Background())
+	require.NotNil(t, GetIndexer(), "the services did not start again")
+
+	// What the monitor of the stopped services does once it runs.
+	stopServicesOf(stopped)
+
+	indexer := GetIndexer()
+	require.NotNil(t, indexer, "the restarted services were stopped")
+	require.True(t, indexer.IsHealthy(), "the restarted indexer was stopped")
+
+	servicesMutex.RLock()
+	current := serviceContext
+	servicesMutex.RUnlock()
+	stopServicesOf(current)
+	require.Nil(t, GetIndexer(), "the monitor of the running services must stop them")
+}

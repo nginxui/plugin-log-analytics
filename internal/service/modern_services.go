@@ -141,8 +141,9 @@ func InitializeServices(ctx context.Context) {
 		<-serviceCtx.Done()
 		logger.Info("Context cancelled, initiating shutdown...")
 
-		// Use the same shutdown logic as manual stop
-		StopServices()
+		// A manual stop cancels this context as well, and the services may
+		// have been started again by now: stop only the ones it belongs to.
+		stopServicesOf(serviceCtx)
 
 		logger.Info("Nginx_log shutdown monitor goroutine completed")
 	}()
@@ -525,22 +526,37 @@ func StopServices() {
 	// grabbing them in the opposite order here would deadlock.
 	defer resetTaskSchedulerState()
 
-	stopServicesLocked()
+	stopServicesLocked(nil)
+}
+
+// stopServicesOf stops the services started with ctx and leaves newer ones
+// running.
+func stopServicesOf(ctx context.Context) {
+	if stopServicesLocked(ctx) {
+		resetTaskSchedulerState()
+	}
 }
 
 // stopServicesLocked tears down the services while holding the services lock.
-func stopServicesLocked() {
+// With an owner it only stops the services started with that context. It
+// reports whether it stopped anything.
+func stopServicesLocked(owner context.Context) bool {
 	servicesMutex.Lock()
 	defer servicesMutex.Unlock()
 
 	if !servicesInitialized {
 		logger.Debug("Modern nginx log services not initialized, nothing to stop")
-		return
+		return false
+	}
+
+	if owner != nil && serviceContext != owner {
+		logger.Debug("Newer nginx log services are running, leaving them alone")
+		return false
 	}
 
 	if isShuttingDown {
 		logger.Debug("Modern nginx log services already shutting down")
-		return
+		return false
 	}
 
 	logger.Debug("Stopping modern nginx log services...")
@@ -589,6 +605,7 @@ func stopServicesLocked() {
 	shardsLoaded.Store(false)
 
 	logger.Debug("Modern nginx log services stopped")
+	return true
 }
 
 // DestroyAllIndexes completely removes all indexed data from disk.
