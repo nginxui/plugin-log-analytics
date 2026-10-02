@@ -225,12 +225,12 @@ unpacked into `webapp/dist`.
 
 ## Releasing
 
-Set the version in `cmd/manifest`, regenerate `plugin.json`, move the
-`Unreleased` notes in `CHANGELOG.md` under the new version, then push a tag
+Set the version in `cmd/manifest`, regenerate `plugin.json`, then push a tag
 `v<version>` that matches `plugin.json`. `.github/workflows/release.yml`
-takes the webapp release, runs the tests, signs the six packages with the key kept
-in the `release` environment and publishes them as a GitHub Release with the
-changelog section as its notes.
+takes the webapp release, runs the tests, signs the six packages with the key
+kept in the `release` environment and publishes them as a GitHub Release.
+The notes list the features and fixes since the previous tag, generated from
+the commit messages by git-cliff (`cliff.toml`).
 
 ## Development
 
