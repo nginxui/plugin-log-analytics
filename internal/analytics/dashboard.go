@@ -263,7 +263,8 @@ func calculateTopFieldStats[T any](
 		return []T{}
 	}
 
-	var items []T
+	// An empty list, never nil: the page reads the field as an array.
+	items := make([]T, 0, len(facet.Terms))
 	for _, term := range facet.Terms {
 		percent := float64(term.Count) / float64(totalHits) * 100
 		items = append(items, creator(term.Term, term.Count, percent))

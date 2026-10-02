@@ -327,3 +327,11 @@ func TestService_calculateDashboardSummaryWithoutAggregates(t *testing.T) {
 	assert.InDelta(t, 0.0, summary.AvgQPS, 0.000001)
 	assert.InDelta(t, 0.0, summary.PeakQPS, 0.000001)
 }
+
+func TestTopFieldStatsOfAFacetWithoutTermsIsAnEmptyList(t *testing.T) {
+	stats := calculateTopFieldStats(&searcher.Facet{Field: facetOS}, 10, func(term string, count int, percent float64) OSAccessStats {
+		return OSAccessStats{OS: term, Count: count, Percent: percent}
+	})
+	assert.NotNil(t, stats)
+	assert.Empty(t, stats)
+}
