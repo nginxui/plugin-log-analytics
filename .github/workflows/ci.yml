@@ -23,7 +23,7 @@ jobs:
       run:
         working-directory: plugin-log-analytics
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: plugin-log-analytics
 
@@ -33,13 +33,13 @@ jobs:
         id: webapp
         run: echo "version=$(sed -n 's/^version=//p' webapp.lock)" >> "${GITHUB_OUTPUT}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: nginxui/plugin-log-analytics-webapp
           ref: v${{ steps.webapp.outputs.version }}
           path: plugin-log-analytics-webapp
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: plugin-log-analytics/go.mod
           cache-dependency-path: plugin-log-analytics/go.sum
