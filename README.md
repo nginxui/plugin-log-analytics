@@ -196,8 +196,11 @@ dist/com.nginxui.log-analytics-<version>-windows-arm64.tar.gz
 Every package holds one binary under `server/dist/`, the web bundle with its
 lazily loaded views and static files, the documentation and a `plugin.json`
 whose `server.executables` names only that platform, as a per-platform package
-must. The committed `plugin.json` keeps all six
+must. The committed `plugin.json` is written by hand and keeps all six
 platforms; it is what the catalog publishes as the release manifest snapshot.
+The tests check it against the webapp build: the bundle paths, the chunks and
+the `shared` ranges must be the ones the build reports in
+`webapp/dist/manifest.webapp.json`, so copy them over after a webapp update.
 `go run ./cmd/manifest -platform <goos>-<goarch> -out <file>` writes the
 narrowed copy, which is what `build.sh` puts into each archive.
 
@@ -225,8 +228,8 @@ unpacked into `webapp/dist`.
 
 ## Releasing
 
-Set the version in `cmd/manifest`, regenerate `plugin.json`, then push a tag
-`v<version>` that matches `plugin.json`. `.github/workflows/release.yml`
+Set the version in `plugin.json`, then push a tag `v<version>` that matches
+it. `.github/workflows/release.yml`
 takes the webapp release, runs the tests, signs the six packages with the key
 kept in the `release` environment and publishes them as a GitHub Release.
 The notes list the features and fixes since the previous tag, generated from
@@ -236,7 +239,6 @@ the commit messages by git-cliff (`cliff.toml`).
 
 ```bash
 ./build.sh --webapp-only                      # the web bundle into webapp/dist
-go run ./cmd/manifest                         # regenerate plugin.json
 go build ./... && go vet ./...
 go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with -short
 ./build.sh --host-only                        # build and package the current platform only

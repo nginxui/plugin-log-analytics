@@ -70,13 +70,14 @@ jobs:
             CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" go build -o /dev/null .
           done
 
-      # plugin.json is committed and the catalog reads it from the release
-      # tag, so it must be what cmd/manifest generates from the code and the
-      # webapp fragment.
-      - name: plugin.json is up to date
+      # plugin.json is written by hand and the catalog reads it from the
+      # release tag, so it must follow the contract.
+      - name: plugin.json follows the plugin-spec schema
         run: |
-          go run ./cmd/manifest -out "${RUNNER_TEMP}/plugin.json" >/dev/null
-          diff -u plugin.json "${RUNNER_TEMP}/plugin.json"
+          curl -fsSL -o "${RUNNER_TEMP}/plugin.schema.json" \
+            https://raw.githubusercontent.com/nginxui/plugin-spec/main/schema/plugin.schema.json
+          npx --yes -p ajv-cli@5 -p ajv-formats@3 ajv validate --spec=draft2020 --strict=false \
+            -c ajv-formats -s "${RUNNER_TEMP}/plugin.schema.json" -d plugin.json
 
       - name: Package the runner's platform
         run: ./build.sh --host-only

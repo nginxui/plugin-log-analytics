@@ -127,7 +127,7 @@ mv "${DIST}/webapp/${PLUGIN_ID}" webapp/dist
 rm -rf "${DIST}/webapp"
 
 if [[ ! -f plugin.json ]]; then
-  echo "plugin.json is missing, run: go run ./cmd/manifest" >&2
+  echo "plugin.json is missing" >&2
   exit 1
 fi
 
@@ -149,7 +149,7 @@ if [[ "${WEBAPP_ONLY}" == 1 ]]; then
   exit 0
 fi
 
-# The version is read back from the generated manifest so it has one source.
+# The version is read from the manifest so it has one source.
 VERSION="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' plugin.json | head -n 1)"
 if [[ -z "${VERSION}" ]]; then
   echo "could not read the version from plugin.json" >&2
@@ -201,7 +201,7 @@ binary_name() {
 # stage_common copies what every package ships besides the binaries.
 stage_common() {
   local dir="$1"
-  # The manifest fragment only feeds cmd/manifest and is not part of a package.
+  # The manifest fragment only feeds the tests and is not part of a package.
   mkdir -p "${dir}/webapp/dist"
   cp -R "${ROOT}/webapp/dist/." "${dir}/webapp/dist/"
   rm -f "${dir}/webapp/dist/manifest.webapp.json"
