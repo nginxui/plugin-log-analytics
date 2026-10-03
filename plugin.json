@@ -14,6 +14,12 @@
         "kv": "以前の Nginx UI から引き継いだインデックスの保存場所を記録します。",
         "log.files": "検索とダッシュボードのために、サイトのアクセスログとエラーログをインデックスします。",
         "network": "ダウンロードを選んだときに IP 位置情報データベースを取得します。"
+      },
+      "screenshot_captions": {
+        "dashboard": "アクセス数、訪問者、転送量とその推移をひと目で確認",
+        "map": "世界地図で訪問者の所在地を確認",
+        "regions": "国を開いて地域ごとのアクセスを確認",
+        "search": "ステータス、パス、ブラウザーなどでアクセスログを絞り込み"
       }
     },
     "zh_CN": {
@@ -23,6 +29,12 @@
         "kv": "记住从旧版 Nginx UI 迁移过来的索引所在的位置。",
         "log.files": "索引站点的访问日志和错误日志，用于搜索和面板。",
         "network": "在你选择下载时获取 IP 归属地数据库。"
+      },
+      "screenshot_captions": {
+        "dashboard": "一览访问量、访客、流量及其趋势",
+        "map": "在世界地图上查看访客来源",
+        "regions": "点开国家查看各地区的访问",
+        "search": "按状态码、路径、浏览器等筛选访问日志"
       }
     },
     "zh_TW": {
@@ -32,9 +44,41 @@
         "kv": "記住從舊版 Nginx UI 移轉過來的索引所在的位置。",
         "log.files": "索引站點的存取日誌和錯誤日誌，用於搜尋和面板。",
         "network": "在你選擇下載時取得 IP 位置資料庫。"
+      },
+      "screenshot_captions": {
+        "dashboard": "一覽訪問量、訪客、流量及其趨勢",
+        "map": "在世界地圖上檢視訪客來源",
+        "regions": "點開國家檢視各地區的訪問",
+        "search": "依狀態碼、路徑、瀏覽器等篩選存取日誌"
       }
     }
   },
+  "screenshots": [
+    {
+      "id": "dashboard",
+      "path": "docs/screenshots/1-dashboard.png",
+      "dark_path": "docs/screenshots/1-dashboard-dark.png",
+      "caption": "Visits, visitors, traffic and their trends at a glance"
+    },
+    {
+      "id": "map",
+      "path": "docs/screenshots/2-map.png",
+      "dark_path": "docs/screenshots/2-map-dark.png",
+      "caption": "See where visitors come from on the world map"
+    },
+    {
+      "id": "regions",
+      "path": "docs/screenshots/3-regions.png",
+      "dark_path": "docs/screenshots/3-regions-dark.png",
+      "caption": "Open a country to see its regions"
+    },
+    {
+      "id": "search",
+      "path": "docs/screenshots/4-search.png",
+      "dark_path": "docs/screenshots/4-search-dark.png",
+      "caption": "Filter the access log by status, path, browser and more"
+    }
+  ],
   "server": {
     "executables": {
       "darwin-amd64": "server/dist/log-analytics-darwin-amd64",
