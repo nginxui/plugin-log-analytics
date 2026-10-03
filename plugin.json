@@ -39,8 +39,17 @@
     "executables": {
       "darwin-amd64": "server/dist/log-analytics-darwin-amd64",
       "darwin-arm64": "server/dist/log-analytics-darwin-arm64",
+      "linux-386": "server/dist/log-analytics-linux-386",
       "linux-amd64": "server/dist/log-analytics-linux-amd64",
+      "linux-arm": "server/dist/log-analytics-linux-arm",
       "linux-arm64": "server/dist/log-analytics-linux-arm64",
+      "linux-loong64": "server/dist/log-analytics-linux-loong64",
+      "linux-mips": "server/dist/log-analytics-linux-mips",
+      "linux-mips64": "server/dist/log-analytics-linux-mips64",
+      "linux-mips64le": "server/dist/log-analytics-linux-mips64le",
+      "linux-mipsle": "server/dist/log-analytics-linux-mipsle",
+      "linux-riscv64": "server/dist/log-analytics-linux-riscv64",
+      "windows-386": "server/dist/log-analytics-windows-386.exe",
       "windows-amd64": "server/dist/log-analytics-windows-amd64.exe",
       "windows-arm64": "server/dist/log-analytics-windows-arm64.exe"
     },

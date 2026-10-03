@@ -63,13 +63,6 @@ jobs:
 
       - run: go test -race -count=1 . ./cmd/... ./internal/...
 
-      # The plugin has to build without cgo: one static binary per platform.
-      - name: Cross compile without cgo
-        run: |
-          for platform in linux/amd64 linux/arm64 darwin/arm64 windows/amd64; do
-            CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" go build -o /dev/null .
-          done
-
       # plugin.json is written by hand and the catalog reads it from the
       # release tag, so it must follow the contract.
       - name: plugin.json follows the plugin-spec schema
@@ -80,4 +73,42 @@ jobs:
             -c ajv-formats -s "${RUNNER_TEMP}/plugin.schema.json" -d plugin.json
 
       - name: Package the runner's platform
-        run: ./build.sh --host-only
+        run: ./build.sh
+
+  # SQLite is linked in through cgo. One target of each kind of cross compiler
+  # the release uses: musl gcc, musl gcc for MIPS, llvm-mingw and macOS clang.
+  cross:
+    name: cross ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.goos == 'darwin' && 'macos-latest' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: arm, goarm: '5' }
+          - { goos: linux, goarch: mips64le }
+          - { goos: windows, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - id: cgo
+        uses: nginxui/setup-cgo@v1
+        with:
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goarm: ${{ matrix.goarm }}
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          EXTLDFLAGS: ${{ steps.cgo.outputs.extldflags }}
+        run: go build -trimpath -ldflags "-s -w -extldflags '${EXTLDFLAGS}'" -o "${RUNNER_TEMP}/log-analytics" .

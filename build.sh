@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Build the release artifacts of the log analytics plugin.
 #
-#   ./build.sh              build every supported platform, one package each
-#   ./build.sh --host-only  build and package the current platform only
+#   ./build.sh                build and package the current platform
+#   ./build.sh --prebuilt DIR package every platform from the executables in DIR
 #   ./build.sh --webapp ARCHIVE  package this webapp archive
 #   ./build.sh --webapp-only  only take the webapp into webapp/dist
 #
+# The plugin links SQLite through cgo, as NGINX UI does, so a platform builds
+# with a C compiler for it. This script compiles for the current platform
+# only; --host-only says the same. The release workflow builds every platform
+# with the cross compilers of nginxui/setup-cgo and packages the executables
+# with --prebuilt: DIR holds one per platform, named as in the package,
+# log-analytics-<goos>-<goarch> with .exe on Windows.
+#
 # Every platform gets its own package, dist/<id>-<version>-<goos>-<goarch>.tar.gz,
 # holding one binary and a plugin.json whose server.executables names only that
-# platform, as a per-platform package must. A package with all six binaries
-# would be six times as large and every node would download five binaries it
+# platform, as a per-platform package must. A package with every binary would
+# be fifteen times as large and every node would download fourteen binaries it
 # never runs. A <archive>.sha256 file sits next to each archive for the catalog.
 #
 # The browser bundle comes from plugin-log-analytics-webapp, which builds it
@@ -48,15 +55,23 @@ PLUGIN_ID="com.nginxui.log-analytics"
 BIN_PREFIX="log-analytics"
 
 usage() {
-  echo "usage: $0 [--host-only] [--webapp ARCHIVE] [--webapp-only]"
+  echo "usage: $0 [--host-only] [--prebuilt DIR] [--webapp ARCHIVE] [--webapp-only]"
 }
 
-HOST_ONLY=0
+PREBUILT=""
 WEBAPP_ONLY=0
 WEBAPP_ARCHIVE="${WEBAPP_ARCHIVE:-}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --host-only) HOST_ONLY=1 ;;
+    --host-only) ;;
+    --prebuilt)
+      if [[ $# -lt 2 ]]; then
+        usage >&2
+        exit 2
+      fi
+      PREBUILT="$(cd "$2" && pwd)"
+      shift
+      ;;
     --webapp-only) WEBAPP_ONLY=1 ;;
     --webapp)
       if [[ $# -lt 2 ]]; then
@@ -156,16 +171,28 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
+# The platforms Nginx UI is released for. The host names a platform by GOOS
+# and GOARCH only, so one linux-arm package serves ARMv5 to ARMv7: it is built
+# for ARMv5, which the later ones run.
 PLATFORMS=(
   "linux/amd64"
   "linux/arm64"
+  "linux/386"
+  "linux/arm"
+  "linux/riscv64"
+  "linux/loong64"
+  "linux/mips"
+  "linux/mipsle"
+  "linux/mips64"
+  "linux/mips64le"
   "darwin/amd64"
   "darwin/arm64"
   "windows/amd64"
   "windows/arm64"
+  "windows/386"
 )
 
-if [[ "${HOST_ONLY}" -eq 1 ]]; then
+if [[ -z "${PREBUILT}" ]]; then
   PLATFORMS=("$(go env GOOS)/$(go env GOARCH)")
 fi
 
@@ -284,8 +311,16 @@ for platform in "${PLATFORMS[@]}"; do
   name="$(binary_name "${goos}" "${goarch}")"
 
   echo "  ${goos}/${goarch}"
-  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-    go build -trimpath -ldflags "-s -w" -o "${BIN}/${name}" .
+  if [[ -n "${PREBUILT}" ]]; then
+    if [[ ! -f "${PREBUILT}/${name}" ]]; then
+      echo "${PREBUILT}/${name} is missing" >&2
+      exit 1
+    fi
+    cp "${PREBUILT}/${name}" "${BIN}/${name}"
+    chmod +x "${BIN}/${name}"
+  else
+    CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o "${BIN}/${name}" .
+  fi
   echo "    ${name} ($(du -h "${BIN}/${name}" | cut -f1 | tr -d '[:space:]'))"
 
   dir="${STAGE}/${key}"

@@ -80,12 +80,20 @@ anywhere.
 
 | OS | Architectures |
 | --- | --- |
-| Linux | amd64, arm64 |
+| Linux | amd64, arm64, 386, arm, riscv64, loong64, mips, mipsle, mips64, mips64le |
 | macOS | amd64, arm64 |
-| Windows | amd64, arm64 |
+| Windows | amd64, arm64, 386 |
 
-The binaries are statically linked (`CGO_ENABLED=0`) and built with
-`-trimpath -ldflags "-s -w"`. Each platform ships as its own package, see
+These are the platforms Nginx UI is released for. One `linux-arm` package
+serves ARMv5 to ARMv7, it is built for ARMv5. The plugin links SQLite through
+cgo like NGINX UI, with the same cross compilers
+([setup-cgo](https://github.com/nginxui/setup-cgo)); the Linux binaries are
+linked statically against musl. All are built with `-trimpath -ldflags "-s -w"`.
+
+On a 32-bit system the index has to fit the address space of the process, as
+it is mapped into memory. A process gets 2 GB on Windows and about 3 GB on
+Linux, which holds an index of about 1.4 to 2.2 GB, some 0.9 to 1.4 million log
+lines. Past that the index cannot be opened and searches fail. Each platform ships as its own package, see
 [Packaging](#packaging).
 
 On Windows the HTTP API listens on a loopback port instead of a socket. The
@@ -196,8 +204,8 @@ dist/com.nginxui.log-analytics-<version>-windows-arm64.tar.gz
 Every package holds one binary under `server/dist/`, the web bundle with its
 lazily loaded views and static files, the documentation and a `plugin.json`
 whose `server.executables` names only that platform, as a per-platform package
-must. The committed `plugin.json` is written by hand and keeps all six
-platforms; it is what the catalog publishes as the release manifest snapshot.
+must. The committed `plugin.json` is written by hand and keeps every
+platform; it is what the catalog publishes as the release manifest snapshot.
 The tests check it against the webapp build: the bundle paths, the chunks and
 the `shared` ranges must be the ones the build reports in
 `webapp/dist/manifest.webapp.json`, so copy them over after a webapp update.
@@ -230,8 +238,11 @@ unpacked into `webapp/dist`.
 
 Set the version in `plugin.json`, then push a tag `v<version>` that matches
 it. `.github/workflows/release.yml`
-takes the webapp release, runs the tests, signs the six packages with the key
-kept in the `release` environment and publishes them as a GitHub Release.
+runs the tests while it builds the executable of every platform in a job of
+its own, with the cross compilers of setup-cgo. It then takes the webapp
+release, packages the executables with `build.sh --prebuilt`, signs the
+packages with the key kept in the `release` environment and publishes them as
+a GitHub Release.
 The notes list the features and fixes since the previous tag, generated from
 the commit messages by git-cliff (`cliff.toml`).
 
@@ -241,8 +252,8 @@ the commit messages by git-cliff (`cliff.toml`).
 ./build.sh --webapp-only                      # the web bundle into webapp/dist
 go build ./... && go vet ./...
 go test -race -count=1 . ./cmd/... ./internal/...   # long benchmarks skip with -short
-./build.sh --host-only                        # build and package the current platform only
-./build.sh                                    # cross compile, one package per platform
+./build.sh                                    # build and package the current platform
+./build.sh --prebuilt DIR                     # package every platform from executables in DIR
 ./build.sh --webapp ARCHIVE                   # package another webapp build
 ```
 
@@ -259,8 +270,10 @@ go work init . ../plugin-sdk-go
 go work edit -replace=github.com/nginxui/plugin-sdk-go@v0.1.0=../plugin-sdk-go
 ```
 
-The state database uses the same GORM dialector as NGINX UI on top of a pure Go
-SQLite driver, which is what lets the plugin build without cgo.
+The state database uses the same GORM dialector and SQLite driver as NGINX UI,
+`github.com/mattn/go-sqlite3`, which needs cgo. Building for another platform
+needs a C cross compiler for it, which is why `build.sh` compiles only for the
+current one.
 
 ## Support
 

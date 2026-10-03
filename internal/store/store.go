@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
+	_ "github.com/mattn/go-sqlite3" // the cgo driver NGINX UI uses, registered as "sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	_ "modernc.org/sqlite" // registers the pure Go "sqlite" database/sql driver
 )
 
 // DatabaseFile is the file name of the state database inside the data directory.
@@ -59,7 +59,7 @@ var memoryCounter atomic.Uint64
 // OpenMemory opens a fresh in-memory database that all its connections share,
 // for tests.
 func OpenMemory() (*gorm.DB, error) {
-	name := fmt.Sprintf("file:nginx-log-mem-%d?mode=memory&cache=shared&_pragma=busy_timeout(5000)&_time_format=sqlite", memoryCounter.Add(1))
+	name := fmt.Sprintf("file:nginx-log-mem-%d?mode=memory&cache=shared&_busy_timeout=5000", memoryCounter.Add(1))
 	return open(name)
 }
 
@@ -79,20 +79,19 @@ func Close() error {
 // dsn builds the connection string of a database file. WAL keeps readers from
 // blocking the writers, the busy timeout makes concurrent writers wait, and
 // immediate transactions take the write lock when they begin so a
-// read-then-write transaction cannot fail on lock upgrade.
+// read-then-write transaction cannot fail on lock upgrade. Times are stored as
+// ISO 8601 text, which sorts and compares like time.
 func dsn(path string) string {
 	query := url.Values{}
-	query.Add("_pragma", "busy_timeout(10000)")
-	query.Add("_pragma", "journal_mode(WAL)")
-	query.Add("_pragma", "synchronous(NORMAL)")
+	query.Set("_busy_timeout", "10000")
+	query.Set("_journal_mode", "WAL")
+	query.Set("_synchronous", "NORMAL")
 	query.Set("_txlock", "immediate")
-	// ISO 8601 text, which sorts and compares like time.
-	query.Set("_time_format", "sqlite")
 	return "file:" + filepath.ToSlash(path) + "?" + query.Encode()
 }
 
 func open(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Dialector{DriverName: "sqlite", DSN: dsn}, &gorm.Config{
+	db, err := gorm.Open(sqlite.Dialector{DriverName: "sqlite3", DSN: dsn}, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {

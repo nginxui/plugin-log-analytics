@@ -1,6 +1,6 @@
 name: Release
 
-# Builds, signs and publishes the six per-platform packages when a version
+# Builds, signs and publishes the per-platform packages when a version
 # tag is pushed. The tag must match plugin.json, e.g. v1.0.0 for
 # "version": "1.0.0".
 #
@@ -22,9 +22,80 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  release:
+  # One executable per platform. SQLite is linked in through cgo, so every
+  # platform builds with its C cross compiler from nginxui/setup-cgo, which are
+  # the toolchains of the NGINX UI releases. macOS builds on a macOS runner.
+  build:
+    name: build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.goos == 'darwin' && 'macos-latest' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: '386' }
+          - { goos: linux, goarch: arm }
+          - { goos: linux, goarch: riscv64 }
+          - { goos: linux, goarch: loong64 }
+          - { goos: linux, goarch: mips }
+          - { goos: linux, goarch: mipsle }
+          - { goos: linux, goarch: mips64 }
+          - { goos: linux, goarch: mips64le }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: windows, goarch: '386' }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # linux/arm is built for ARMv5, which ARMv6 and ARMv7 run too.
+      - id: cgo
+        uses: nginxui/setup-cgo@v1
+        with:
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goarm: ${{ matrix.goarch == 'arm' && '5' || '' }}
+
+      - name: Build the executable
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarch == 'arm' && '5' || '' }}
+          EXTLDFLAGS: ${{ steps.cgo.outputs.extldflags }}
+        run: |
+          set -euo pipefail
+          name="log-analytics-${GOOS}-${GOARCH}"
+          if [[ "${GOOS}" == windows ]]; then
+            name="${name}.exe"
+          fi
+          mkdir -p "${RUNNER_TEMP}/out"
+          go build -trimpath -ldflags "-s -w -extldflags '${EXTLDFLAGS}'" -o "${RUNNER_TEMP}/out/${name}" .
+          file "${RUNNER_TEMP}/out/${name}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # The tests and the checks of plugin.json, apart from the builds so both run
+  # at the same time.
+  test:
     runs-on: ubuntu-latest
-    environment: release
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: plugin-log-analytics
@@ -32,8 +103,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: plugin-log-analytics
-          # git-cliff reads the commits since the previous tag.
-          fetch-depth: 0
+          persist-credentials: false
 
       # The API shape test reads the webapp source of the release this plugin
       # packages.
@@ -46,6 +116,7 @@ jobs:
           repository: nginxui/plugin-log-analytics-webapp
           ref: v${{ steps.webapp.outputs.version }}
           path: plugin-log-analytics-webapp
+          persist-credentials: false
 
       - uses: actions/setup-go@v7
         with:
@@ -75,6 +146,36 @@ jobs:
           npx --yes -p ajv-cli@5 -p ajv-formats@3 ajv validate --spec=draft2020 --strict=false \
             -c ajv-formats -s "${RUNNER_TEMP}/plugin.schema.json" -d plugin.json
 
+  release:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment: release
+    defaults:
+      run:
+        working-directory: plugin-log-analytics
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: plugin-log-analytics
+          # git-cliff reads the commits since the previous tag.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: plugin-log-analytics/go.mod
+          cache-dependency-path: plugin-log-analytics/go.sum
+
+      # The packages carry the webapp release webapp.lock names, checked against
+      # the checksum published with it
+      - name: Take the webapp release
+        run: ./build.sh --webapp-only
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: plugin-log-analytics/binaries
+
       - name: Install minisign
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
 
@@ -91,7 +192,7 @@ jobs:
           key_file="${RUNNER_TEMP}/plugin-signing.key"
           trap 'rm -f "${key_file}"' EXIT
           (umask 077 && printf '%s\n' "${PLUGIN_SIGNING_KEY}" >"${key_file}")
-          MINISIGN_KEY="${key_file}" MINISIGN_PASSWORD="${PLUGIN_SIGNING_KEY_PASSWORD}" ./build.sh
+          MINISIGN_KEY="${key_file}" MINISIGN_PASSWORD="${PLUGIN_SIGNING_KEY_PASSWORD}" ./build.sh --prebuilt binaries
 
       # Every archive: its .sha256 file, plugin.sums against the extracted
       # files, and the signature against the release public key when the
