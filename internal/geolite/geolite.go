@@ -12,12 +12,17 @@ import (
 
 type IPLocation struct {
 	RegionCode string `json:"region_code"`
-	Province   string `json:"province"`
-	City       string `json:"city"`
-	C1         string `json:"c1,omitempty"`
-	C2         string `json:"c2,omitempty"`
-	C3         string `json:"c3,omitempty"`
-	C4         string `json:"c4,omitempty"`
+	// Province and City are in English, or in Chinese when the database has
+	// no English name. The page shows other languages, see CityID.
+	Province string `json:"province"`
+	City     string `json:"city"`
+	// CityID is the GeoNames id of the city, 0 when the database has none.
+	// The page looks up the name of the city in its language by it.
+	CityID uint   `json:"city_id,omitempty"`
+	C1     string `json:"c1,omitempty"`
+	C2     string `json:"c2,omitempty"`
+	C3     string `json:"c3,omitempty"`
+	C4     string `json:"c4,omitempty"`
 	// Sub1 and Sub2 are the ISO 3166-2 codes of the first two subdivision
 	// levels, like US-CA or FR-IDF and FR-75. Empty when the database has none.
 	Sub1 string `json:"sub1,omitempty"`
@@ -58,9 +63,10 @@ type mmdbLocation struct {
 }
 
 type mmdbCity struct {
-	Names  mmdbNames `maxminddb:"names"`
-	Name   string    `maxminddb:"name"`
-	NameZH string    `maxminddb:"name_zh"`
+	Names     mmdbNames `maxminddb:"names"`
+	Name      string    `maxminddb:"name"`
+	NameZH    string    `maxminddb:"name_zh"`
+	GeoNameID uint      `maxminddb:"geoname_id"`
 }
 
 type mmdbRecord struct {
@@ -191,20 +197,11 @@ func (s *Service) Search(ipStr string) (*IPLocation, error) {
 		loc.Sub1 = subdivisionCode(country, record.Subdivisions, 0)
 		loc.Sub2 = subdivisionCode(country, record.Subdivisions, 1)
 
-		loc.Province = provinceEN
-		loc.City = cityEN
+		loc.Province = firstNonEmpty(provinceEN, provinceZH)
+		loc.City = firstNonEmpty(cityEN, cityZH)
+		loc.CityID = record.City.GeoNameID
 
 		if IsChineseRegion(loc.RegionCode) || IsChineseRegion(record.Country.ISOCode) {
-			if provinceZH != "" {
-				loc.Province = provinceZH
-			} else if loc.Province == "" {
-				loc.Province = "其它"
-			}
-
-			if cityZH != "" {
-				loc.City = cityZH
-			}
-
 			// Hong Kong, Macau and Taiwan are regions of the China map
 			if country != "CN" && IsChineseRegion(country) {
 				loc.Sub1 = "CN-" + country
@@ -215,7 +212,7 @@ func (s *Service) Search(ipStr string) (*IPLocation, error) {
 
 		lat, lon := record.Location.Latitude, record.Location.Longitude
 		if loc.City != "" && lat != nil && lon != nil && !math.IsNaN(*lat) && !math.IsNaN(*lon) {
-			loc.CityPoint = CityPoint(loc.RegionCode, loc.City, *lat, *lon)
+			loc.CityPoint = CityPoint(loc.RegionCode, loc.City, loc.CityID, *lat, *lon)
 		}
 
 		return loc, nil

@@ -460,10 +460,12 @@ func TestMemoryUsageValidation(t *testing.T) {
 			t.Logf("   Records Processed: %d", result.Processed)
 			t.Logf("   Peak Memory: %d bytes", memAfter.Sys)
 
-			// Memory usage should be reasonable (< 1KB per record). The race
-			// detector's instrumentation inflates allocations roughly 7x, so
-			// use a proportionally relaxed bound there.
-			maxBytesPerRecord := 1024.0
+			// Memory usage should be reasonable, about 1KB per record. Runs
+			// vary by some 25 bytes, so the bound leaves room above the 1000 to
+			// 1020 bytes an entry with its city id takes. The race detector's
+			// instrumentation inflates allocations roughly 7x, so use a
+			// proportionally relaxed bound there.
+			maxBytesPerRecord := 1152.0
 			if raceEnabled {
 				maxBytesPerRecord = 8 * 1024
 			}

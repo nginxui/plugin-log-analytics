@@ -341,7 +341,7 @@ func enrichErrorEntry(entry map[string]interface{}) map[string]interface{} {
 // leaves out the empty ones.
 var (
 	accessEntryDefaults = map[string]any{
-		"timestamp": int64(0), "ip": "", "method": "", "region_code": "", "province": "", "city": "",
+		"timestamp": int64(0), "ip": "", "method": "", "region_code": "", "province": "", "city": "", "sub1": "", "city_id": 0,
 		"path": "", "protocol": "", "status": 0, "bytes_sent": int64(0), "referer": "", "user_agent": "",
 		"browser": "", "browser_version": "", "os": "", "os_version": "", "device_type": "", "raw": "",
 	}

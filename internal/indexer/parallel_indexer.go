@@ -649,6 +649,9 @@ func (w *indexWorker) logDocumentToMap(doc *LogDocument) map[string]interface{} 
 	if doc.City != "" {
 		docMap["city"] = doc.City
 	}
+	if doc.CityID != 0 {
+		docMap["city_id"] = doc.CityID
+	}
 	if doc.C1 != "" {
 		docMap["c1"] = doc.C1
 	}

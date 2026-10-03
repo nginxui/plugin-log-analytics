@@ -12,6 +12,7 @@ type AccessLogEntry struct {
 	RegionCode   string   `json:"region_code"`
 	Province     string   `json:"province"`
 	City         string   `json:"city"`
+	CityID       uint     `json:"city_id,omitempty"`
 	C1           string   `json:"c1,omitempty"`
 	C2           string   `json:"c2,omitempty"`
 	C3           string   `json:"c3,omitempty"`
@@ -70,6 +71,7 @@ type GeoLocation struct {
 	RegionCode  string
 	Province    string
 	City        string
+	CityID      uint
 	C1          string
 	C2          string
 	C3          string

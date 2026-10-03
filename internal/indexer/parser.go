@@ -228,6 +228,7 @@ func convertToLogDocument(entry *parser.AccessLogEntry, filePath, mainLogPath st
 		RegionCode:  entry.RegionCode,
 		Province:    entry.Province,
 		City:        entry.City,
+		CityID:      entry.CityID,
 		C1:          entry.C1,
 		C2:          entry.C2,
 		C3:          entry.C3,

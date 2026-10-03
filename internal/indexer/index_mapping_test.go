@@ -57,7 +57,8 @@ func TestCreateLogIndexMappingUsesOnlyRequiredIndexFeatures(t *testing.T) {
 		{name: "file_path", store: true, index: true},
 		{name: "main_log_path", store: true, index: true},
 		{name: "level", store: true, index: true, docValues: true},
-		{name: "sub1", index: true, docValues: true},
+		{name: "sub1", store: true, index: true, docValues: true},
+		{name: "city_id", store: true},
 		{name: "sub2", index: true, docValues: true},
 		{name: "city_point", index: true, docValues: true},
 	}

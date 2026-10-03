@@ -108,13 +108,14 @@ func (s *service) GetCityPoints(ctx context.Context, req *GeoQueryRequest, count
 	}
 	points := make([]CityPoint, 0, len(facet.Terms))
 	for _, term := range facet.Terms {
-		country, city, lat, lon, ok := geolite.ParseCityPoint(term.Term)
+		country, city, cityID, lat, lon, ok := geolite.ParseCityPoint(term.Term)
 		if !ok {
 			continue
 		}
 		points = append(points, CityPoint{
 			Country: country,
 			City:    city,
+			CityID:  cityID,
 			Lat:     lat,
 			Lon:     lon,
 			Value:   term.Count,

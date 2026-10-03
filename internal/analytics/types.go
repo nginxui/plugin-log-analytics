@@ -187,8 +187,11 @@ type RegionShare struct {
 // CityPoint is one city of the hotspot map with its share of the requests
 // that were placed in a city.
 type CityPoint struct {
-	Country string  `json:"country"`
+	Country string `json:"country"`
+	// City is the English name, the page names the city in its language by
+	// CityID, the GeoNames id, which is 0 for data indexed without it.
 	City    string  `json:"city"`
+	CityID  uint    `json:"city_id"`
 	Lat     float64 `json:"lat"`
 	Lon     float64 `json:"lon"`
 	Value   int     `json:"value"`

@@ -274,6 +274,7 @@ type LogDocument struct {
 	RegionCode   string   `json:"region_code,omitempty"`
 	Province     string   `json:"province,omitempty"`
 	City         string   `json:"city,omitempty"`
+	CityID       uint     `json:"city_id,omitempty"`
 	C1           string   `json:"c1,omitempty"`
 	C2           string   `json:"c2,omitempty"`
 	C3           string   `json:"c3,omitempty"`
@@ -521,7 +522,10 @@ func CreateLogIndexMapping() mapping.IndexMapping {
 	addTextField("level", "keyword", storedIndexedAndSortable)
 	// The region and hotspot maps count these. Like the level they exist only
 	// in shards created with them, so older groups show them after a rebuild.
-	addTextField("sub1", "keyword", fieldOptions{index: true, docValues: true})
+	// The page names the region of an entry in its language by sub1 and the
+	// city by its GeoNames id, so both are stored.
+	addTextField("sub1", "keyword", storedIndexedAndSortable)
+	addNumericField("city_id", fieldOptions{store: true})
 	addTextField("sub2", "keyword", fieldOptions{index: true, docValues: true})
 	addTextField("city_point", "keyword", fieldOptions{index: true, docValues: true})
 
