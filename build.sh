@@ -31,19 +31,10 @@
 # plugin.json sits at the root of the archive, next to server/, webapp/ and the
 # documentation.
 #
-# Every package also carries plugin.sums at its root: the sha256 of each file
-# of the package in sha256sum format, sorted by path. When MINISIGN_KEY names a
-# minisign secret key file, plugin.sums is signed into plugin.sums.minisig and
-# nginx-ui derives the trust level from the signing key. Without MINISIGN_KEY
-# the packages are unsigned, and a host installs them only in developer mode.
-#
-#   MINISIGN_KEY=/path/to/plugin.key ./build.sh
-#
-# minisign asks for the key password once per package. MINISIGN_PASSWORD
-# answers the prompt without a terminal, which is how the release workflow
-# signs; a key created without a password (minisign -G -W) never asks.
-#
-#   MINISIGN_KEY=/path/to/plugin.key MINISIGN_PASSWORD=... ./build.sh
+# The packages are unsigned. The release workflow signs them with the official
+# plugin key through nginxui/plugin-release, which also writes plugin.sums. A
+# local build installs on a host in developer mode, or after
+# "nginx-ui plugin sign <package> --key <key>".
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,21 +83,6 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-
-# The key path is resolved before the cd below, so a relative path works.
-MINISIGN_KEY="${MINISIGN_KEY:-}"
-MINISIGN_PASSWORD="${MINISIGN_PASSWORD:-}"
-if [[ -n "${MINISIGN_KEY}" ]]; then
-  if [[ ! -f "${MINISIGN_KEY}" ]]; then
-    echo "MINISIGN_KEY does not name a file: ${MINISIGN_KEY}" >&2
-    exit 1
-  fi
-  if ! command -v minisign >/dev/null 2>&1; then
-    echo "MINISIGN_KEY is set but minisign is not installed" >&2
-    exit 1
-  fi
-  MINISIGN_KEY="$(cd "$(dirname "${MINISIGN_KEY}")" && pwd)/$(basename "${MINISIGN_KEY}")"
-fi
 
 cd "${ROOT}"
 
@@ -239,47 +215,12 @@ stage_common() {
   done
 }
 
-# write_sums writes plugin.sums at the root of a staged package: one
-# "<sha256>  <path>" line per regular file, with the path relative to the root
-# and the lines sorted bytewise by path. plugin.sums and plugin.sums.minisig
-# are not listed. The list is written next to the directory first so find
-# never sees it.
-write_sums() {
-  local dir="$1" file
-  rm -f "${dir}/plugin.sums" "${dir}/plugin.sums.minisig"
-  (
-    cd "${dir}"
-    find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r file; do
-      printf '%s  %s\n' "$(sha256_hex "${file}")" "${file}"
-    done
-  ) >"${dir}.sums"
-  mv "${dir}.sums" "${dir}/plugin.sums"
-}
-
-# sign_sums signs plugin.sums into plugin.sums.minisig when MINISIGN_KEY is set.
-sign_sums() {
-  local dir="$1"
-  if [[ -z "${MINISIGN_KEY}" ]]; then
-    return 0
-  fi
-  (
-    cd "${dir}"
-    if [[ -n "${MINISIGN_PASSWORD}" ]]; then
-      printf '%s\n' "${MINISIGN_PASSWORD}" \
-        | minisign -S -m plugin.sums -x plugin.sums.minisig -s "${MINISIGN_KEY}" -t "${PLUGIN_ID} ${VERSION}"
-    else
-      minisign -S -m plugin.sums -x plugin.sums.minisig -s "${MINISIGN_KEY}" -t "${PLUGIN_ID} ${VERSION}"
-    fi
-  )
-}
-
-# package_dir writes one archive with plugin.json as its first entry and the
-# signature files right after it. The top level entries are listed explicitly
+# package_dir writes one archive with plugin.json as its first entry. The top level entries are listed explicitly
 # so the archive has no "./" root entry.
 package_dir() {
   local dir="$1" archive="$2"
-  local entries=(plugin.json plugin.sums)
-  for entry in plugin.sums.minisig README.md LICENSE server webapp; do
+  local entries=(plugin.json)
+  for entry in README.md LICENSE server webapp; do
     if [[ -e "${dir}/${entry}" ]]; then
       entries+=("${entry}")
     fi
@@ -299,9 +240,6 @@ MANIFEST_TOOL="${DIST}/.manifest-tool"
 go build -o "${MANIFEST_TOOL}" ./cmd/manifest
 
 echo "building ${PLUGIN_ID} ${VERSION}"
-if [[ -z "${MINISIGN_KEY}" ]]; then
-  echo "MINISIGN_KEY is not set, the packages are unsigned"
-fi
 
 OUTPUTS=()
 for platform in "${PLATFORMS[@]}"; do
@@ -329,8 +267,6 @@ for platform in "${PLATFORMS[@]}"; do
   stage_common "${dir}"
   "${MANIFEST_TOOL}" -in "${ROOT}/plugin.json" -platform "${key}" -out "${dir}/plugin.json" >/dev/null
 
-  write_sums "${dir}"
-  sign_sums "${dir}"
   package_dir "${dir}" "${DIST}/${PLUGIN_ID}-${VERSION}-${key}.tar.gz"
 done
 

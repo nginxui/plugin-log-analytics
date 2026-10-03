@@ -212,18 +212,12 @@ the `shared` ranges must be the ones the build reports in
 `go run ./cmd/manifest -platform <goos>-<goarch> -out <file>` writes the
 narrowed copy, which is what `build.sh` puts into each archive.
 
-Every package also carries `plugin.sums`, the sha256 of every file but itself
-and the signature, and, in a signed package, `plugin.sums.minisig`, the
-minisign signature over it. `build.sh` signs only when `MINISIGN_KEY` names a
-minisign secret key file:
-
-```bash
-MINISIGN_KEY=/path/to/plugin.key ./build.sh
-```
-
-Without it the packages are unsigned, and a host installs them only in
-developer mode. `MINISIGN_PASSWORD` answers the password prompt without a
-terminal.
+`build.sh` makes unsigned packages, which a host installs only in developer
+mode. The release workflow signs them with the official plugin key through
+[nginxui/plugin-release](https://github.com/nginxui/plugin-release), which adds
+`plugin.sums`, the sha256 of every file but itself and the signature, and
+`plugin.sums.minisig`, the minisign signature over it. A local build is signed
+with `nginx-ui plugin sign <package> --key <key>`.
 
 `build.sh` takes the web bundle from
 [plugin-log-analytics-webapp](https://github.com/nginxui/plugin-log-analytics-webapp),
