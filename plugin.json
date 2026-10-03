@@ -5,7 +5,7 @@
   "description": "Search nginx access and error logs with structured queries and see traffic on a dashboard with a visitor map. Provides the former Advanced Indexing feature.",
   "icon_path": "webapp/dist/icon.svg",
   "api_version": 1,
-  "min_nginx_ui_version": "2.7.0",
+  "min_nginx_ui_version": "3.0.0",
   "i18n": {
     "ja_JP": {
       "name": "ログ分析",
