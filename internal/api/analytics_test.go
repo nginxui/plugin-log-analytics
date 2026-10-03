@@ -1,9 +1,12 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,4 +63,27 @@ func TestLocalDayStartsAtTheLocalMidnight(t *testing.T) {
 
 	_, err = localDay("2026/10/01")
 	assert.Error(t, err)
+}
+
+func TestLocationLabelFollowsThePageLanguage(t *testing.T) {
+	entry := map[string]interface{}{"region_code": "CN", "province": "广东", "city": "深圳", "c1": "电信"}
+	assert.Equal(t, "CN, 广东, 深圳, 电信", buildStructuredIPLocationLabel(entry, false))
+	assert.Equal(t, "中国 广东 深圳 电信", buildStructuredIPLocationLabel(entry, true))
+	assert.Equal(t, "corp, lan", buildStructuredIPLocationLabel(map[string]interface{}{"c1": "corp", "c2": "lan"}, false))
+}
+
+func TestThePageLanguageOutranksTheBrowser(t *testing.T) {
+	request := func(headers map[string]string) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		for name, value := range headers {
+			c.Request.Header.Set(name, value)
+		}
+		return c
+	}
+
+	assert.False(t, isChineseLanguageRequest(request(map[string]string{"Accept-Language": "zh-CN,zh;q=0.9", "X-Language": "en"})))
+	assert.True(t, isChineseLanguageRequest(request(map[string]string{"Accept-Language": "en-US", "X-Language": "zh_TW"})))
+	assert.True(t, isChineseLanguageRequest(request(map[string]string{"Accept-Language": "zh-CN,zh;q=0.9"})))
+	assert.False(t, isChineseLanguageRequest(request(nil)))
 }

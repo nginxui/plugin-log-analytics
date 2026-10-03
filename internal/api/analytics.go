@@ -233,22 +233,22 @@ func toOptionalString(value interface{}) string {
 	return strings.TrimSpace(s)
 }
 
+// isChineseLanguageRequest tells whether the client asked for Chinese names.
+// The language of the page, sent as X-Language or X-Locale, decides; the
+// browser's Accept-Language only when the page names none.
 func isChineseLanguageRequest(c *gin.Context) bool {
 	if c == nil {
 		return false
 	}
 
-	for _, header := range []string{"Accept-Language", "X-Language", "X-Locale"} {
-		value := strings.ToLower(strings.TrimSpace(c.GetHeader(header)))
-		if value == "" {
-			continue
-		}
-		if strings.HasPrefix(value, "zh") || strings.Contains(value, "zh-") || strings.Contains(value, "zh_") {
-			return true
+	for _, header := range []string{"X-Language", "X-Locale"} {
+		if value := strings.ToLower(strings.TrimSpace(c.GetHeader(header))); value != "" {
+			return strings.HasPrefix(value, "zh")
 		}
 	}
 
-	return false
+	value := strings.ToLower(strings.TrimSpace(c.GetHeader("Accept-Language")))
+	return strings.HasPrefix(value, "zh") || strings.Contains(value, "zh-") || strings.Contains(value, "zh_")
 }
 
 func displayCountryName(regionCode string, countryNameZH string, useChineseName bool) string {
@@ -291,17 +291,12 @@ func buildStructuredIPLocationLabel(entry map[string]interface{}, useChineseName
 		}
 	}
 
-	baseLabel := strings.Join(baseParts, " · ")
-	if len(customParts) == 0 {
-		return baseLabel
+	// Chinese names read as one phrase with spaces, others as a list
+	separator := ", "
+	if useChineseName {
+		separator = " "
 	}
-
-	customLabel := strings.Join(customParts, " · ")
-	if baseLabel == "" {
-		return customLabel
-	}
-
-	return baseLabel + " · " + customLabel
+	return strings.Join(append(baseParts, customParts...), separator)
 }
 
 func enrichEntryWithIPLocationLabel(entry map[string]interface{}, useChineseName bool) map[string]interface{} {
