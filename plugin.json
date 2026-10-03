@@ -9,15 +9,30 @@
   "i18n": {
     "ja_JP": {
       "name": "ログ分析",
-      "description": "Nginx のアクセスログとエラーログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。"
+      "description": "Nginx のアクセスログとエラーログを構造化検索し、ダッシュボードと訪問者マップでトラフィックを確認します。以前の「高度なインデックス作成」機能を提供します。",
+      "permission_reasons": {
+        "kv": "以前の Nginx UI から引き継いだインデックスの保存場所を記録します。",
+        "log.files": "検索とダッシュボードのために、サイトのアクセスログとエラーログをインデックスします。",
+        "network": "ダウンロードを選んだときに IP 位置情報データベースを取得します。"
+      }
     },
     "zh_CN": {
       "name": "日志分析",
-      "description": "对 Nginx 访问日志和错误日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。"
+      "description": "对 Nginx 访问日志和错误日志做结构化搜索，在面板和访客地图上查看流量。提供原“高级索引”功能。",
+      "permission_reasons": {
+        "kv": "记住从旧版 Nginx UI 迁移过来的索引所在的位置。",
+        "log.files": "索引站点的访问日志和错误日志，用于搜索和面板。",
+        "network": "在你选择下载时获取 IP 归属地数据库。"
+      }
     },
     "zh_TW": {
       "name": "日誌分析",
-      "description": "對 Nginx 存取日誌和錯誤日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。"
+      "description": "對 Nginx 存取日誌和錯誤日誌做結構化搜尋，在面板和訪客地圖上檢視流量。提供原「進階索引」功能。",
+      "permission_reasons": {
+        "kv": "記住從舊版 Nginx UI 移轉過來的索引所在的位置。",
+        "log.files": "索引站點的存取日誌和錯誤日誌，用於搜尋和面板。",
+        "network": "在你選擇下載時取得 IP 位置資料庫。"
+      }
     }
   },
   "server": {
@@ -63,6 +78,11 @@
   "network_hosts": [
     "cloud.nginxui.com"
   ],
+  "permission_reasons": {
+    "kv": "To remember where an index carried over from an earlier Nginx UI is kept.",
+    "log.files": "To index the access and error logs of your sites for search and the dashboard.",
+    "network": "To download the IP location database when you choose to."
+  },
   "http": {
     "listen": "unix"
   },
