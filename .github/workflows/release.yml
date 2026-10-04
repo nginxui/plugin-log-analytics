@@ -165,11 +165,6 @@ jobs:
           go-version-file: plugin-log-analytics/go.mod
           cache-dependency-path: plugin-log-analytics/go.sum
 
-      # The packages carry the webapp release webapp.lock names, checked against
-      # the checksum published with it
-      - name: Take the webapp release
-        run: ./build.sh --webapp-only
-
       - uses: actions/download-artifact@v8
         with:
           pattern: binary-*
