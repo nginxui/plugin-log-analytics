@@ -138,29 +138,28 @@ func performIncrementalIndexing() {
 
 	// Process files sequentially to avoid overwhelming the system
 	// This is more conservative but prevents concurrent file indexing from consuming too much CPU
+	scheduler := GetTaskScheduler()
 	changedCount := 0
 	for _, log := range pending {
-		logger.Debugf("Starting incremental indexing for file: %s", log.Path)
-
-		// Set status to indexing
-		if err := setFileIndexStatus(log.Path, string(indexer.IndexStatusIndexing), logFileManager); err != nil {
-			logger.Errorf("Failed to set indexing status for %s: %v", log.Path, err)
-			continue
+		indexed := false
+		run := func() {
+			indexed = indexLogGroupIncrementally(log.Path, modernIndexer, logFileManager)
 		}
 
-		// Perform incremental indexing synchronously (one file at a time)
-		if err := performGroupIncrementalIndexing(log.Path, modernIndexer, logFileManager); err != nil {
-			logger.Errorf("Failed incremental indexing for %s: %v", log.Path, err)
-			// Set error status
-			if statusErr := setFileIndexStatus(log.Path, string(indexer.IndexStatusError), logFileManager); statusErr != nil {
-				logger.Errorf("Failed to set error status for %s: %v", log.Path, statusErr)
+		// Run under the scheduler's group lock and run slot, so the round
+		// neither races a scheduled task on the same log group nor raises the
+		// number of groups being indexed at once.
+		if scheduler != nil {
+			if !scheduler.TryRunIndexTask(context.Background(), log.Path, run) {
+				logger.Debugf("Skipping incremental indexing for %s: an indexing task is running for it", log.Path)
+				continue
 			}
 		} else {
+			run()
+		}
+
+		if indexed {
 			changedCount++
-			// Set status to indexed
-			if err := setFileIndexStatus(log.Path, string(indexer.IndexStatusIndexed), logFileManager); err != nil {
-				logger.Errorf("Failed to set indexed status for %s: %v", log.Path, err)
-			}
 		}
 	}
 
@@ -169,6 +168,30 @@ func performIncrementalIndexing() {
 		// Update searcher shards once after all files are processed
 		UpdateSearcherShards()
 	}
+}
+
+// indexLogGroupIncrementally indexes one log group and keeps its index status
+// in step. It reports whether the group was indexed successfully.
+func indexLogGroupIncrementally(logPath string, modernIndexer *indexer.ParallelIndexer, logFileManager *indexer.LogFileManager) bool {
+	logger.Debugf("Starting incremental indexing for file: %s", logPath)
+
+	if err := setFileIndexStatus(logPath, string(indexer.IndexStatusIndexing), logFileManager); err != nil {
+		logger.Errorf("Failed to set indexing status for %s: %v", logPath, err)
+		return false
+	}
+
+	if err := performGroupIncrementalIndexing(logPath, modernIndexer, logFileManager); err != nil {
+		logger.Errorf("Failed incremental indexing for %s: %v", logPath, err)
+		if statusErr := setFileIndexStatus(logPath, string(indexer.IndexStatusError), logFileManager); statusErr != nil {
+			logger.Errorf("Failed to set error status for %s: %v", logPath, statusErr)
+		}
+		return false
+	}
+
+	if err := setFileIndexStatus(logPath, string(indexer.IndexStatusIndexed), logFileManager); err != nil {
+		logger.Errorf("Failed to set indexed status for %s: %v", logPath, err)
+	}
+	return true
 }
 
 // groupStateProvider gives the stored state of the files of a log group.

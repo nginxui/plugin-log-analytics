@@ -223,3 +223,64 @@ func TestRunSlotsSurviveRepeatedScheduling(t *testing.T) {
 		return runtime.NumGoroutine() <= before+2
 	}, 2*time.Second, 10*time.Millisecond, "repeated scheduling must not grow the goroutine count")
 }
+
+// TestTryRunIndexTaskHoldsGroupAndSlot checks that the incremental round runs a
+// group under its lock and a run slot, and gives both back afterwards.
+func TestTryRunIndexTaskHoldsGroupAndSlot(t *testing.T) {
+	withMaxConcurrentIndexTasks(t, 1)
+
+	scheduler := NewTaskScheduler(context.Background())
+	defer scheduler.cancel()
+
+	const logPath = "/var/log/nginx/access.log"
+	ran := scheduler.TryRunIndexTask(context.Background(), logPath, func() {
+		assert.True(t, scheduler.IsTaskInProgress(logPath), "the group must be locked while it runs")
+		assert.Len(t, scheduler.runSlots, 1, "the group must hold a run slot while it runs")
+	})
+
+	require.True(t, ran)
+	assert.False(t, scheduler.IsTaskInProgress(logPath), "the group lock must be released")
+	assert.Len(t, scheduler.runSlots, 0, "the run slot must be released")
+}
+
+// TestTryRunIndexTaskSkipsBusyGroup checks that the incremental round leaves a
+// group alone while a scheduled task holds it.
+func TestTryRunIndexTaskSkipsBusyGroup(t *testing.T) {
+	scheduler := NewTaskScheduler(context.Background())
+	defer scheduler.cancel()
+
+	const logPath = "/var/log/nginx/access.log"
+	_, release := scheduler.AcquireTaskLock(logPath)
+
+	called := false
+	ran := scheduler.TryRunIndexTask(context.Background(), logPath, func() { called = true })
+	release()
+
+	assert.False(t, ran)
+	assert.False(t, called, "a busy group must not be indexed")
+	assert.Len(t, scheduler.runSlots, 0, "a skipped group must not keep a run slot")
+}
+
+// TestTryRunIndexTaskStopsWaitingForSlot checks that a round waiting for a run
+// slot gives up when its context ends, without running the group or keeping
+// its lock.
+func TestTryRunIndexTaskStopsWaitingForSlot(t *testing.T) {
+	withMaxConcurrentIndexTasks(t, 1)
+
+	scheduler := NewTaskScheduler(context.Background())
+	defer scheduler.cancel()
+
+	require.True(t, scheduler.acquireRunSlot(context.Background()), "another group takes the only slot")
+	defer scheduler.releaseRunSlot()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	const logPath = "/var/log/nginx/access.log"
+	called := false
+	ran := scheduler.TryRunIndexTask(ctx, logPath, func() { called = true })
+
+	assert.False(t, ran)
+	assert.False(t, called)
+	assert.False(t, scheduler.IsTaskInProgress(logPath), "the group lock must be released")
+}
