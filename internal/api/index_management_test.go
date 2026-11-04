@@ -141,6 +141,42 @@ func TestRebuildAllFilesDiscoversLogGroups(t *testing.T) {
 		assertIndexedGroup(t, logPath, 2)
 		service.StopServices()
 	})
+
+	// A group whose site was deleted together with its log file is neither
+	// listed by the host nor on disk. It must not be listed, and a full rebuild
+	// must not queue it again and so recreate its metadata.
+	t.Run("stale group is not resurrected", func(t *testing.T) {
+		livePath := writeAccessLog(t, logsDir, "still-there.log", 2)
+		stalePath := filepath.Join(logsDir, "deleted-site.access.log")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		service.StopServices()
+		service.SetHostLogs([]utils.HostLog{{Path: livePath, Type: "access", Source: "config"}})
+		service.InitializeServices(ctx)
+
+		modernIndexer := service.GetIndexer()
+		require.NotNil(t, modernIndexer)
+		logFileManager := service.GetLogFileManager()
+		require.NotNil(t, logFileManager)
+
+		require.NoError(t, logFileManager.DeleteAllIndexMetadata())
+		require.NoError(t, logFileManager.SaveIndexMetadata(livePath, 0, time.Now(), 0, nil, nil))
+		require.NoError(t, logFileManager.SaveIndexMetadata(stalePath, 0, time.Now(), 0, nil, nil))
+
+		require.NotContains(t, groupedPaths(service.GetAllLogsWithIndexGrouped()), stalePath)
+
+		rebuildAllFiles(modernIndexer, logFileManager, nil)
+
+		assertIndexedGroup(t, livePath, 2)
+		db, err := store.DB()
+		require.NoError(t, err)
+		var count int64
+		require.NoError(t, db.Model(&store.NginxLogIndex{}).Where("main_log_path = ?", stalePath).Count(&count).Error)
+		require.Zero(t, count, "the rebuild must not recreate the stale group")
+		service.StopServices()
+	})
 }
 
 // groupedPaths returns the paths of a grouped log list in a stable order.

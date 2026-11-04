@@ -64,6 +64,7 @@ func (s *IncrementalScheduler) run(ctx context.Context) {
 	defer close(s.done)
 
 	wait := incrementalStartDelay
+	var staleGroups map[string]bool
 	for {
 		timer := time.NewTimer(wait)
 		select {
@@ -80,6 +81,7 @@ func (s *IncrementalScheduler) run(ctx context.Context) {
 
 		// Rounds run one after the other on this goroutine, which is what keeps
 		// them from overlapping.
+		staleGroups = pruneStaleLogGroups(staleGroups)
 		performIncrementalIndexing()
 		wait = config.Get().IncrementalInterval()
 	}
