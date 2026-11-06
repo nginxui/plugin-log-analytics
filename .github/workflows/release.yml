@@ -8,8 +8,8 @@ name: Release
 # minisign secret key file and PLUGIN_SIGNING_KEY_PASSWORD its password. Give
 # the environment a required reviewer so a pushed tag alone cannot sign. The
 # PLUGIN_SIGNING_PUBLIC_KEY variable, the matching public key, lets
-# nginxui/plugin-release check what it signed. The catalog (nginxui/plugins)
-# polls this repository's releases and picks the new one up on its own.
+# nginxui/plugin-release check what it signed. The official catalog
+# (plugins.nginxui.com) polls this repository's releases and picks the new one up on its own.
 
 on:
   push:
